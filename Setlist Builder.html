@@ -72,6 +72,14 @@ table.data tbody tr:hover{background:#fbf7ec}
 .bhead .w-date{width:150px}.bhead .w-venue{width:180px}.bhead .w-num{width:110px}
 .summary{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:8px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:13px}
 .summary b{color:var(--navy)}
+.voxbal{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:6px;border-top:1px solid var(--line2)}
+.voxbal .vbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
+.vb{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;border:1px solid var(--line);background:#fff;border-radius:20px;padding:2px 10px 2px 10px;cursor:pointer;color:var(--text)}
+.vb:hover{border-color:#c9c2b2}
+.vb.on{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+.vb .vbbar{width:34px;height:5px;background:var(--line2);border-radius:3px;overflow:hidden}
+.vb .vbbar i{display:block;height:100%;background:var(--gold)}
+.vb b{min-width:12px;text-align:right}
 .over{color:var(--danger);font-weight:700}
 .under{color:var(--muted)}
 .near{color:var(--ok);font-weight:700}
@@ -598,7 +606,23 @@ function renderSetItems(){
     <span>Playing time <b class="${tc}">${durText(c.play,c.missing)}</b>${sl.target?` / ${fmt(sl.target*60)} target ${c.play<=sl.target*60?`(${fmt(sl.target*60-c.play)} left)`:`(<span class="over">${fmt(c.play-sl.target*60)} over</span>)`}`:''}</span>
     ${c.brk?`<span>With breaks <b>${durText(c.withBreaks,c.missing)}</b></span>`:''}
     ${c.missing?`<span class="muted">${c.missing} song${c.missing===1?' has':'s have'} no length. Totals are a minimum.</span>`:''}
-    <span class="muted">${Number(sl.buffer)||0}s gap between songs, none after a segue</span>`;
+    <span class="muted">${Number(sl.buffer)||0}s gap between songs, none after a segue</span>
+    ${voxBalance(sl)}`;
+  $$('[data-voxf]').forEach(b=>b.onclick=()=>{ const v=b.dataset.voxf; bf.vox = bf.vox===v ? '' : v; $('#bvox').innerHTML=voxOpts(); $('#bvox').value=bf.vox; renderBcat(); renderSetItems(); });
+}
+function voxBalance(sl){
+  const songs=sl.items.filter(i=>i.kind==='song');
+  if(!songs.length) return '';
+  const solo={}, shared={};
+  songs.forEach(it=>{ const v=it.vox||[]; v.forEach(n=>{ (v.length>1?shared:solo)[n]=((v.length>1?shared:solo)[n]||0)+1; }); });
+  const seen=new Set([...Object.keys(solo),...Object.keys(shared)]);
+  const names=[...S.settings.members, ...[...seen].filter(n=>n!=='All' && !S.settings.members.includes(n)), ...(seen.has('All')?['All']:[])].filter(n=>seen.has(n));
+  const none=songs.filter(i=>!(i.vox||[]).length).length;
+  const max=Math.max(1,...names.map(n=>(solo[n]||0)+(shared[n]||0)));
+  return `<div class="voxbal"><span class="vbl">Lead vox</span>${names.map(n=>{ const a=solo[n]||0, b=shared[n]||0, t=a+b;
+    return `<button class="vb ${bf.vox===n?'on':''}" data-voxf="${esc(n)}" title="${esc(n)}: ${t} song${t===1?'':'s'}${b?` (${a} solo, ${b} shared)`:''}\nClick to filter the catalog to ${esc(n)}'s songs">
+      <span class="vbn">${esc(n)}</span><span class="vbbar"><i style="width:${Math.round(t/max*100)}%"></i></span><b>${t}</b></button>`; }).join('')}
+    ${none?`<span class="muted">${none} with no vox set</span>`:''}</div>`;
 }
 ACT.back = () => { sel.clear(); go('setlists'); };
 ACT.addSel = () => { if(!sel.size) return; insertSongs(orderedSel()); sel.clear(); renderBcat(); };
