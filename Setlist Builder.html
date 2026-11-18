@@ -138,7 +138,6 @@ table.data tbody tr:hover{background:#fbf7ec}
 .segtag{display:inline-block;font-size:10px;font-weight:800;color:#fff;background:var(--navy);border-radius:4px;padding:0 5px;margin-right:6px;vertical-align:1px;letter-spacing:.04em}
 .item .tg{display:flex;flex-wrap:wrap;gap:2px;min-width:0}
 .item .tg .tag{margin:0;font-size:10px;padding:0 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tag.clash{background:#fdd9a8;color:#7a3f00;box-shadow:0 0 0 1px #ee9a3a}
 .item.locked{background:#fffaf0}
 .item.locked .n{color:var(--warn);font-weight:800}
 .handle.lockh{cursor:default;font-size:10px;letter-spacing:0;opacity:.8}
@@ -146,7 +145,12 @@ table.data tbody tr:hover{background:#fbf7ec}
 .ib.lk:hover{opacity:.75}
 .ib.lk.on{filter:none;opacity:1;background:#fff1c7}
 .clashnote{color:#8a4b00;font-weight:700}
-.spreadlist{display:flex;flex-wrap:wrap;gap:6px 16px}
+.tagrows{display:flex;flex-direction:column;gap:6px}
+.tagrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tagrow .tag{min-width:80px;text-align:center}
+.swatches{display:flex;gap:3px}
+.sw{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.12);cursor:pointer;padding:0}
+.sw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--navy)}
 .item.break{grid-template-columns:16px 1fr 90px 30px;background:#f3efe6;margin:6px 0}
 .item.break input{padding:3px 7px}
 .item.break .blabel{font-weight:700}
@@ -270,7 +274,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1, showSetVox:true}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, tagColors:{}, showSetVox:true}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -292,6 +296,11 @@ function normalize(){
   const have=new Set(S.settings.columns.map(c=>c.id));
   for(const id in COLS) if(!have.has(id)) S.settings.columns.push({id,on:false});
   S.settings.columns = S.settings.columns.filter(c=>COLS[c.id]);
+  delete S.settings.spreadTags; delete S.settings.spreadDist;
+  S.settings.tagColors ||= {};
+  const tagSet=new Set(S.songs.flatMap(x=>x.tags||[]));
+  if(tagSet.has('holiday') && !S.settings.tagColors.holiday) S.settings.tagColors.holiday='red';
+  if(tagSet.has('halloween') && !S.settings.tagColors.halloween) S.settings.tagColors.halloween='orange';
   if(!Array.isArray(S.settings.members)) S.settings.members=[...new Set(S.songs.flatMap(s=>s.vox))].filter(v=>v!=='All');
 }
 function save(markDirty=true){
@@ -330,6 +339,19 @@ function itemLen(it){ const s=songById(it.songId); return s ? s.length : it.leng
 const cur = () => S.setlists.find(s=>s.id===curId);
 function touch(){ const sl=cur(); if(sl) sl.updated=Date.now(); save(); }
 const logoSrc = () => S.settings.logo || '';
+const TAG_COLORS = {
+  red:['#fde2e1','#9b1c1c'], orange:['#ffe4c7','#9a4a00'], yellow:['#fff1b8','#715400'], green:['#d9f2df','#1e6b3a'],
+  teal:['#d2f1ed','#0f5f58'], blue:['#dce7ff','#1d4ea8'], indigo:['#e3e3fb','#3730a3'], purple:['#eedff9','#6b21a8'],
+  pink:['#fbdfee','#9d174d'], gray:['#e9e9e9','#3f3f3f']};
+function tagColor(t){
+  const tc = S.settings.tagColors ||= {};
+  if(!TAG_COLORS[tc[t]]){
+    const used={}; Object.values(tc).forEach(c=>used[c]=(used[c]||0)+1);
+    tc[t] = Object.keys(TAG_COLORS).filter(c=>c!=='gray').sort((a,b)=>(used[a]||0)-(used[b]||0))[0];
+  }
+  return TAG_COLORS[tc[t]];
+}
+function tagChip(t, attrs=''){ const [bg,fg]=tagColor(t); return `<span class="tag" style="background:${bg};color:${fg}" ${attrs}>${esc(t)}</span>`; }
 function allTags(){ return [...new Set(S.songs.flatMap(s=>s.tags))].sort(); }
 function allVox(){ return [...new Set(S.songs.flatMap(s=>s.vox))].sort((a,b)=>a==='All'?-1:b==='All'?1:a.localeCompare(b)); }
 function itemTitle(it){ const s=songById(it.songId); return s ? s.title : (it.title||'(deleted song)'); }
@@ -447,7 +469,7 @@ function renderCatTable(){
   $('#ctbody').innerHTML = list.map(s=>`<tr data-act="editSong" data-id="${s.id}">
     <td><b>${esc(s.title)}</b>${s.type==='mashup'?`<span class="badge mash">MASHUP</span><div class="msub">${esc(mashupParts(s))}</div>`:''}</td>
     <td>${esc(s.key)||bl}</td><td>${esc(voxStr(s.vox))||bl}</td><td>${fmt(s.length)||bl}</td><td>${s.tempo??bl}</td>
-    <td>${s.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</td><td class="muted">${esc(s.notes)}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">No songs match.</td></tr>`;
+    <td>${s.tags.map(t=>tagChip(t)).join('')}</td><td class="muted">${esc(s.notes)}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">No songs match.</td></tr>`;
 }
 ACT.sort = d => { if(cat.sort===d.k) cat.dir*=-1; else {cat.sort=d.k; cat.dir=1;} renderCatalog(); };
 ACT.newSong = () => editSong(null, false);
@@ -458,7 +480,7 @@ ACT.editSong = d => editSong(d.id);
 function openModal(html, wide){ const m=$('#modal'); m.innerHTML=`<div class="mbox ${wide?'wide':''}">${html}</div>`; m.classList.add('open'); $$('[data-close]',m).forEach(b=>b.onclick=closeModal); }
 function closeModal(){ const m=$('#modal'); m.classList.remove('open'); m.innerHTML=''; }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && $('#modal').classList.contains('open')) closeModal(); });
-function tagChips(target){ const tags=allTags(); return tags.length?`<div class="chips">${tags.map(t=>`<span class="tag" data-addtag="${esc(t)}">+ ${esc(t)}</span>`).join('')}</div>`:''; }
+function tagChips(target){ const tags=allTags(); return tags.length?`<div class="chips">${tags.map(t=>{ const [bg,fg]=tagColor(t); return `<span class="tag" style="background:${bg};color:${fg}" data-addtag="${esc(t)}">+ ${esc(t)}</span>`; }).join('')}</div>`:''; }
 function wireChips(inputSel){ $$('[data-addtag]', $('#modal')).forEach(c=>c.onclick=()=>{ const i=$(inputSel); i.value=parseTags(i.value+','+c.dataset.addtag).join(', '); }); }
 
 /* ---------- song editor ---------- */
@@ -580,7 +602,7 @@ function renderBcat(){
   bVisible=list.map(s=>s.id);
   $('#bcat').innerHTML = list.map(s=>`<div class="crow ${sel.has(s.id)?'sel':''}" draggable="true" data-sid="${s.id}" title="${esc(s.title)}${s.type==='mashup'?'\n'+esc(mashupParts(s)):''}${s.notes?'\n'+esc(s.notes):''}">
     <span class="ck"></span><span class="t">${esc(s.title)}${s.type==='mashup'?'<span class="badge mash">M</span>':''}${inSet.has(s.id)?'<span class="badge inset">IN SET</span>':''}</span>
-    <span class="s">${esc(s.key)}</span><span class="s">${esc(voxStr(s.vox))}</span><span class="tg">${s.tags.map(t=>`<span class="tag" title="${esc(t)}">${esc(t)}</span>`).join('')}</span><span class="r">${fmt(s.length)}</span></div>`).join('') || '<div class="empty">No songs match.</div>';
+    <span class="s">${esc(s.key)}</span><span class="s">${esc(voxStr(s.vox))}</span><span class="tg">${s.tags.map(t=>tagChip(t, `title="${esc(t)}"`)).join('')}</span><span class="r">${fmt(s.length)}</span></div>`).join('') || '<div class="empty">No songs match.</div>';
   updateSelBtn();
 }
 function updateSelBtn(){ const b=$('#addSelBtn'); if(b){ b.textContent = sel.size ? `Add selected (${sel.size})` : 'Add selected'; b.disabled=!sel.size; } }
@@ -622,26 +644,10 @@ function setBounds(items, idx){
   while(e<items.length-1 && items[e+1].kind!=='break') e++;
   return [s,e];
 }
-/* idx -> Set of spread-out tags that are too close to the same tag in this set */
-function tagClashes(sl){
-  const spread=new Set(S.settings.spreadTags||[]), dist=Math.max(1, Number(S.settings.spreadDist)||1), out={};
-  if(!spread.size) return out;
-  const segs=[[]]; sl.items.forEach((it,i)=>{ if(it.kind==='break') segs.push([]); else segs[segs.length-1].push(i); });
-  const tagsOf = i => (songById(sl.items[i].songId)?.tags||[]).filter(t=>spread.has(t));
-  segs.forEach(seg=>seg.forEach((ia,a)=>{
-    const ta=tagsOf(ia); if(!ta.length) return;
-    for(let b=a+1; b<=a+dist && b<seg.length; b++){
-      const ib=seg[b], tb=tagsOf(ib);
-      ta.forEach(t=>{ if(tb.includes(t)){ (out[ia] ||= new Set()).add(t); (out[ib] ||= new Set()).add(t); } });
-    }
-  }));
-  return out;
-}
 function differs(it){ const s=songById(it.songId); if(!s) return false; return (it.key||'')!==(s.key||'') || voxStr(it.vox)!==voxStr(s.vox) || (it.tempo??null)!==(s.tempo??null) || (it.notes||'')!==(s.notes||''); }
 function renderSetItems(){
   const sl=cur(); const c=computeSets(sl);
   const counts={}; sl.items.forEach(i=>{ if(i.kind==='song') counts[i.songId]=(counts[i.songId]||0)+1; });
-  const clash=tagClashes(sl), dist=Math.max(1, Number(S.settings.spreadDist)||1);
   const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVoxRow(st.songs, sl):''}`; };
   let html=head(0), n=0, si=0;
   sl.items.forEach((it,idx)=>{
@@ -657,13 +663,13 @@ function renderSetItems(){
       const prev=sl.items[idx-1], next=sl.items[idx+1];
       const fromPrev = prev && prev.kind==='song' && prev.segue, intoNext = it.segue && next && next.kind==='song';
       const chain = fromPrev||intoNext ? `chain ${fromPrev?'':'c-start'} ${intoNext?'':'c-end'}` : '';
-      const tags=songById(it.songId)?.tags||[], cl=clash[idx];
+      const tags=songById(it.songId)?.tags||[];
       const lockTip = it.locked ? (it.lockEnd ? 'Locked as the last song of this set' : `Locked at #${(it.lockPos||0)+1} in this set`) : '';
       html+=`<div class="item ${chain} ${it.locked?'locked':''}" draggable="${it.locked?'false':'true'}" data-idx="${idx}">
         ${it.locked?`<span class="handle lockh" title="${lockTip}">🔒</span>`:'<span class="handle" title="Drag to reorder">⋮⋮</span>'}<span class="n">${n}</span>
         <span class="ttl" title="${esc(itemTitle(it))}${it.notes?'\n'+esc(it.notes):''}">${fromPrev?'<span class="segtag" title="Segues in from the previous song">SEGUE</span>':''}${esc(itemTitle(it))}${m?'<span class="badge mash">M</span>':''}${dup?`<span class="badge warn" title="This song is in the setlist ${counts[it.songId]} times">×${counts[it.songId]}</span>`:''}${differs(it)?'<span class="dot" title="Edited for this gig (differs from catalog)">●</span>':''}${outV.length?`<span class="badge warn" title="${esc(outV.join(' & '))} ${outV.length>1?'aren’t':'isn’t'} playing this gig. Use ✎ to change the vox for this gig.">${esc(outV.join(' & '))} out</span>`:''}${m&&itemParts(it)?`<span class="msub">${esc(itemParts(it))}</span>`:''}</span>
         <span class="k">${esc(it.key)}</span><span class="v">${esc(voxStr(it.vox))}</span>
-        <span class="tg">${tags.map(t=>`<span class="tag ${cl&&cl.has(t)?'clash':''}" title="${cl&&cl.has(t)?`Another ${esc(t)} song is ${dist===1?'right next to this one':`within ${dist} songs`}`:esc(t)}">${esc(t)}</span>`).join('')}</span>
+        <span class="tg">${tags.map(t=>tagChip(t)).join('')}</span>
         <span class="l" data-act="editLen" data-idx="${idx}" title="Click to set length (applies everywhere this song is played)">${fmt(itemLen(it))||'<span class="addlen">+ len</span>'}</span>
         <button class="ib lk ${it.locked?'on':''}" data-act="lock" data-idx="${idx}" title="${it.locked?lockTip+'. Click to unlock.':'Lock this song’s position in the set (locks its whole segue group)'}">🔒</button>
         <button class="ib seg ${it.segue?'on':''}" data-act="segue" data-idx="${idx}" title="Segue: goes straight into the next song">→</button>
@@ -682,7 +688,6 @@ function renderSetItems(){
     ${c.brk?`<span>With breaks <b>${durText(c.withBreaks,c.missing)}</b></span>`:''}
     ${c.missing?`<span class="muted">${c.missing} song${c.missing===1?' has':'s have'} no length. Totals are a minimum.</span>`:''}
     <span class="muted">${Number(sl.buffer)||0}s gap between songs, none after a segue</span>
-    ${Object.keys(clash).length?`<span class="clashnote" title="Change which tags are checked in Band settings">⚠ ${Object.keys(clash).length} songs too close to another with the same tag</span>`:''}
     ${(()=>{ const k=sl.items.filter(i=>i.kind==='song' && outSingers(sl,i).length).length; return k?`<span class="clashnote">⚠ ${k} song${k===1?' has':'s have'} a lead singer who isn’t playing</span>`:''; })()}
     ${lineupRow(sl)}
     ${voxBalance(sl)}`;
@@ -847,7 +852,7 @@ function cellHtml(c, it, n){
     case 'length': return fmt(itemLen(it));
     case 'tempo': return it.tempo??'';
     case 'notes': return esc(it.notes);
-    case 'tags': { const s=songById(it.songId); return s?esc(s.tags.join(', ')):''; }
+    case 'tags': { const s=songById(it.songId); return s?s.tags.map(t=>tagChip(t)).join(' '):''; }
   }
 }
 function buildDoc(sl){
@@ -965,10 +970,9 @@ function renderSettings(){
       <div class="row"><input id="mNew" placeholder="Add a member…"><button class="btn" data-act="addMember">Add</button></div>
     </div>
     <div class="card" style="padding:18px">
-      <h2>Spread out tags</h2>
-      <p class="muted" style="margin-top:-6px">In the setlist builder, songs with a checked tag are highlighted when another song with the same tag is too close. A break resets the check.</p>
-      <div class="spreadlist">${allTags().map(t=>`<label class="opt"><input type="checkbox" data-spread="${esc(t)}" ${(S.settings.spreadTags||[]).includes(t)?'checked':''}> ${esc(t)}</label>`).join('') || '<span class="muted">No tags in the catalog yet.</span>'}</div>
-      <label style="margin-top:12px">Warn when within <small>(songs; 1 = back-to-back)</small><input id="spreadDist" inputmode="numeric" value="${S.settings.spreadDist??1}" style="width:80px"></label>
+      <h2>Tag colors</h2>
+      <p class="muted" style="margin-top:-6px">New tags get a color automatically. Click a swatch to change it.</p>
+      <div class="tagrows">${allTags().map(t=>`<div class="tagrow">${tagChip(t)}<span class="swatches">${Object.entries(TAG_COLORS).map(([k,[bg,fg]])=>`<button class="sw ${S.settings.tagColors[t]===k?'on':''}" data-tagc="${esc(t)}" data-c="${k}" title="${k}" style="background:${bg};border-color:${fg}55"></button>`).join('')}</span></div>`).join('') || '<span class="muted">No tags in the catalog yet.</span>'}</div>
     </div>
     <div class="card" style="padding:18px">
       <h2>New setlist defaults</h2>
@@ -990,8 +994,7 @@ function renderSettings(){
   </div>`;
   renderMembers();
   $('#mNew').onkeydown=e=>{ if(e.key==='Enter') ACT.addMember(); };
-  $$('[data-spread]').forEach(c=>c.onchange=()=>{ const t=c.dataset.spread, set=new Set(S.settings.spreadTags||[]); c.checked?set.add(t):set.delete(t); S.settings.spreadTags=[...set]; save(); });
-  $('#spreadDist').onchange=e=>{ S.settings.spreadDist=Math.max(1, parseInt(e.target.value)||1); e.target.value=S.settings.spreadDist; save(); };
+  $$('[data-tagc]').forEach(b=>b.onclick=()=>{ S.settings.tagColors[b.dataset.tagc]=b.dataset.c; save(); renderSettings(); });
   $('#defBuf').onchange=e=>{ S.settings.defaultBuffer=numOrNull(e.target.value)??0; save(); };
   $('#logoFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{ const w=Math.min(1000,img.width), h=Math.round(img.height*w/img.width); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); S.settings.logo=cv.toDataURL('image/png'); save(); render(); }; img.src=r.result; }; r.readAsDataURL(f); };
   $('#bandName').onchange=e=>{ const v=e.target.value.trim(); if(!v){ e.target.value=S.band.name; return; } S.band.name=v; save(); render(); };
