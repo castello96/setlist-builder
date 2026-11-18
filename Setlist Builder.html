@@ -105,6 +105,14 @@ table.data tbody tr:hover{background:#fbf7ec}
 #sitems.drop-end::after{content:"";display:block;height:3px;background:var(--orange);margin:0 10px;border-radius:2px}
 .sethead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px 4px;font-weight:800;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
 .sethead span{text-transform:none;letter-spacing:0;font-weight:600;color:var(--muted)}
+.setvox{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0 12px 6px}
+.setvox .svl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.sv{font:inherit;font-size:11px;border:1px solid var(--line);border-radius:12px;padding:0 8px;background:#fff;cursor:pointer;color:var(--text);line-height:18px}
+.sv:hover{border-color:#c9c2b2}
+.sv b{color:var(--navy);margin-left:3px}
+.sv.on{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+.lu{font:inherit;font-size:12px;border:1px solid var(--navy);background:#eef0fa;color:var(--navy);border-radius:20px;padding:2px 10px;cursor:pointer;font-weight:600}
+.lu.out{border:1px dashed #c3bdb0;background:#fff;color:var(--muted);text-decoration:line-through;font-weight:500}
 .item{display:grid;grid-template-columns:16px 26px minmax(120px,1fr) 56px 110px 100px 52px 30px 30px 30px 30px;gap:6px;align-items:center;padding:5px 10px;border-top:3px solid transparent;border-bottom:1px solid var(--line2);background:#fff}
 .item:hover{background:#fdfbf6}
 .item.drop-before{border-top-color:var(--orange)}
@@ -262,7 +270,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1, showSetVox:true}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -551,7 +559,7 @@ function renderBuilder(){
         <div class="list" id="bcat"></div>
       </section>
       <section class="pane">
-        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
+        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><button class="btn sm ${S.settings.showSetVox?'primary':''}" data-act="toggleSetVox" id="setVoxBtn" title="Show or hide how many songs each person sings in each set">Vox per set</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
         <div class="list" id="sitems"></div>
       </section>
     </div>`;
@@ -634,7 +642,7 @@ function renderSetItems(){
   const sl=cur(); const c=computeSets(sl);
   const counts={}; sl.items.forEach(i=>{ if(i.kind==='song') counts[i.songId]=(counts[i.songId]||0)+1; });
   const clash=tagClashes(sl), dist=Math.max(1, Number(S.settings.spreadDist)||1);
-  const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>`; };
+  const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVoxRow(st.songs, sl):''}`; };
   let html=head(0), n=0, si=0;
   sl.items.forEach((it,idx)=>{
     if(it.kind==='break'){
@@ -645,7 +653,7 @@ function renderSetItems(){
       si++; html+=head(si);
     } else {
       n++;
-      const dup=counts[it.songId]>1, m=itemType(it)==='mashup';
+      const dup=counts[it.songId]>1, m=itemType(it)==='mashup', outV=outSingers(sl, it);
       const prev=sl.items[idx-1], next=sl.items[idx+1];
       const fromPrev = prev && prev.kind==='song' && prev.segue, intoNext = it.segue && next && next.kind==='song';
       const chain = fromPrev||intoNext ? `chain ${fromPrev?'':'c-start'} ${intoNext?'':'c-end'}` : '';
@@ -653,7 +661,7 @@ function renderSetItems(){
       const lockTip = it.locked ? (it.lockEnd ? 'Locked as the last song of this set' : `Locked at #${(it.lockPos||0)+1} in this set`) : '';
       html+=`<div class="item ${chain} ${it.locked?'locked':''}" draggable="${it.locked?'false':'true'}" data-idx="${idx}">
         ${it.locked?`<span class="handle lockh" title="${lockTip}">🔒</span>`:'<span class="handle" title="Drag to reorder">⋮⋮</span>'}<span class="n">${n}</span>
-        <span class="ttl" title="${esc(itemTitle(it))}${it.notes?'\n'+esc(it.notes):''}">${fromPrev?'<span class="segtag" title="Segues in from the previous song">SEGUE</span>':''}${esc(itemTitle(it))}${m?'<span class="badge mash">M</span>':''}${dup?`<span class="badge warn" title="This song is in the setlist ${counts[it.songId]} times">×${counts[it.songId]}</span>`:''}${differs(it)?'<span class="dot" title="Edited for this gig (differs from catalog)">●</span>':''}${m&&itemParts(it)?`<span class="msub">${esc(itemParts(it))}</span>`:''}</span>
+        <span class="ttl" title="${esc(itemTitle(it))}${it.notes?'\n'+esc(it.notes):''}">${fromPrev?'<span class="segtag" title="Segues in from the previous song">SEGUE</span>':''}${esc(itemTitle(it))}${m?'<span class="badge mash">M</span>':''}${dup?`<span class="badge warn" title="This song is in the setlist ${counts[it.songId]} times">×${counts[it.songId]}</span>`:''}${differs(it)?'<span class="dot" title="Edited for this gig (differs from catalog)">●</span>':''}${outV.length?`<span class="badge warn" title="${esc(outV.join(' & '))} ${outV.length>1?'aren’t':'isn’t'} playing this gig. Use ✎ to change the vox for this gig.">${esc(outV.join(' & '))} out</span>`:''}${m&&itemParts(it)?`<span class="msub">${esc(itemParts(it))}</span>`:''}</span>
         <span class="k">${esc(it.key)}</span><span class="v">${esc(voxStr(it.vox))}</span>
         <span class="tg">${tags.map(t=>`<span class="tag ${cl&&cl.has(t)?'clash':''}" title="${cl&&cl.has(t)?`Another ${esc(t)} song is ${dist===1?'right next to this one':`within ${dist} songs`}`:esc(t)}">${esc(t)}</span>`).join('')}</span>
         <span class="l" data-act="editLen" data-idx="${idx}" title="Click to set length (applies everywhere this song is played)">${fmt(itemLen(it))||'<span class="addlen">+ len</span>'}</span>
@@ -675,20 +683,49 @@ function renderSetItems(){
     ${c.missing?`<span class="muted">${c.missing} song${c.missing===1?' has':'s have'} no length. Totals are a minimum.</span>`:''}
     <span class="muted">${Number(sl.buffer)||0}s gap between songs, none after a segue</span>
     ${Object.keys(clash).length?`<span class="clashnote" title="Change which tags are checked in Band settings">⚠ ${Object.keys(clash).length} songs too close to another with the same tag</span>`:''}
+    ${(()=>{ const k=sl.items.filter(i=>i.kind==='song' && outSingers(sl,i).length).length; return k?`<span class="clashnote">⚠ ${k} song${k===1?' has':'s have'} a lead singer who isn’t playing</span>`:''; })()}
+    ${lineupRow(sl)}
     ${voxBalance(sl)}`;
+  $$('[data-lineup]').forEach(b=>b.onclick=()=>{ const n=b.dataset.lineup, out=new Set(sl.out||[]); out.has(n)?out.delete(n):out.add(n); sl.out=[...out]; touch(); renderSetItems(); });
   $$('[data-voxf]').forEach(b=>b.onclick=()=>{ const v=b.dataset.voxf; bf.vox = bf.vox===v ? '' : v; $('#bvox').innerHTML=voxOpts(); $('#bvox').value=bf.vox; renderBcat(); renderSetItems(); });
+}
+/* Lineup: members playing this gig (everyone except sl.out). "All" credits each of them. */
+const lineup = sl => S.settings.members.filter(m=>!(sl.out||[]).includes(m));
+const outSingers = (sl, it) => (it.vox||[]).filter(n=>n!=='All' && (sl.out||[]).includes(n));
+function voxTally(songs, sl){
+  const solo={}, shared={}, playing=lineup(sl), out=new Set(sl.out||[]);
+  const add=(o,n)=>{ o[n]=(o[n]||0)+1; };
+  songs.forEach(it=>{
+    const v=it.vox||[];
+    const credited=[...new Set(v.flatMap(n=>n==='All'?playing:[n]))].filter(n=>!out.has(n));
+    const isShared = v.includes('All') || v.length>1;
+    credited.forEach(n=>add(isShared?shared:solo, n));
+  });
+  const seen=new Set([...Object.keys(solo),...Object.keys(shared)]);
+  const names=[...playing, ...[...seen].filter(n=>!S.settings.members.includes(n))].filter(n=>seen.has(n));
+  return {solo, shared, names, none:songs.filter(i=>!(i.vox||[]).length).length, all:songs.filter(i=>(i.vox||[]).includes('All')).length};
+}
+const voxTip = (n, a, b, where) => `${n}: ${a+b} song${a+b===1?'':'s'}${where}${b?` (${a} solo, ${b} shared or All)`:''}\nClick to filter the catalog to ${n}'s songs`;
+function setVoxRow(songs, sl){
+  if(!songs.length) return '';
+  const {solo, shared, names, none}=voxTally(songs, sl);
+  return `<div class="setvox"><span class="svl">Vox</span>${names.map(n=>{ const a=solo[n]||0, b=shared[n]||0;
+    return `<button class="sv ${bf.vox===n?'on':''}" data-voxf="${esc(n)}" title="${esc(voxTip(n,a,b,' in this set'))}">${esc(n)}<b>${a+b}</b></button>`; }).join('')}${none?`<span class="muted">${none} with no vox</span>`:''}</div>`;
+}
+ACT.toggleSetVox = () => { S.settings.showSetVox=!S.settings.showSetVox; save(); $('#setVoxBtn').classList.toggle('primary', S.settings.showSetVox); renderSetItems(); };
+function lineupRow(sl){
+  const m=S.settings.members; if(!m.length) return '';
+  const out=new Set(sl.out||[]);
+  return `<div class="voxbal"><span class="vbl">Playing</span>${m.map(n=>`<button class="lu ${out.has(n)?'out':''}" data-lineup="${esc(n)}" title="${out.has(n)?`${esc(n)} is out for this gig. Click to add back.`:`Click if ${esc(n)} isn't playing this gig`}">${out.has(n)?'':'✓ '}${esc(n)}</button>`).join('')}
+    <span class="muted">“All” songs count for everyone playing.</span></div>`;
 }
 function voxBalance(sl){
   const songs=sl.items.filter(i=>i.kind==='song');
   if(!songs.length) return '';
-  const solo={}, shared={};
-  songs.forEach(it=>{ const v=it.vox||[]; v.forEach(n=>{ (v.length>1?shared:solo)[n]=((v.length>1?shared:solo)[n]||0)+1; }); });
-  const seen=new Set([...Object.keys(solo),...Object.keys(shared)]);
-  const names=[...S.settings.members, ...[...seen].filter(n=>n!=='All' && !S.settings.members.includes(n)), ...(seen.has('All')?['All']:[])].filter(n=>seen.has(n));
-  const none=songs.filter(i=>!(i.vox||[]).length).length;
+  const {solo, shared, names, none}=voxTally(songs, sl);
   const max=Math.max(1,...names.map(n=>(solo[n]||0)+(shared[n]||0)));
   return `<div class="voxbal"><span class="vbl">Lead vox</span>${names.map(n=>{ const a=solo[n]||0, b=shared[n]||0, t=a+b;
-    return `<button class="vb ${bf.vox===n?'on':''}" data-voxf="${esc(n)}" title="${esc(n)}: ${t} song${t===1?'':'s'}${b?` (${a} solo, ${b} shared)`:''}\nClick to filter the catalog to ${esc(n)}'s songs">
+    return `<button class="vb ${bf.vox===n?'on':''}" data-voxf="${esc(n)}" title="${esc(voxTip(n,a,b,''))}">
       <span class="vbn">${esc(n)}</span><span class="vbbar"><i style="width:${Math.round(t/max*100)}%"></i></span><b>${t}</b></button>`; }).join('')}
     ${none?`<span class="muted">${none} with no vox set</span>`:''}</div>`;
 }
@@ -969,7 +1006,7 @@ function renderMembers(){
     const i=+inp.dataset.mi, old=m[i], nw=inp.value.trim();
     if(!nw || nw===old) { inp.value=old; return; }
     if(m.includes(nw) || nw==='All'){ alert(`"${nw}" already exists.`); inp.value=old; return; }
-    m[i]=nw; S.songs.forEach(s=>s.vox=swap(s.vox,old,nw)); S.setlists.forEach(sl=>sl.items.forEach(it=>{ if(it.vox) it.vox=swap(it.vox,old,nw); }));
+    m[i]=nw; S.songs.forEach(s=>s.vox=swap(s.vox,old,nw)); S.setlists.forEach(sl=>{ sl.items.forEach(it=>{ if(it.vox) it.vox=swap(it.vox,old,nw); }); if(sl.out) sl.out=sl.out.map(x=>x===old?nw:x); });
     save(); renderMembers();
   });
   $$('[data-mup]',el).forEach(b=>b.onclick=()=>{ const i=+b.dataset.mup; [m[i-1],m[i]]=[m[i],m[i-1]]; save(); renderMembers(); });
