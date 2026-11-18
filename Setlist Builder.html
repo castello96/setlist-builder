@@ -198,7 +198,14 @@ table.data tbody tr:hover{background:#fbf7ec}
 .pdoc .pname{font-size:1.35em;font-weight:800;margin-top:.15em}
 .pdoc .psub{font-size:.9em;color:#555}
 .pdoc .pnotes{font-size:.85em;color:#333;margin:.2em 0 .6em;white-space:pre-wrap;text-align:center}
-.pdoc table{width:100%;border-collapse:collapse}
+.pdoc table{width:100%;border-collapse:collapse;table-layout:fixed}
+.pdoc td{overflow-wrap:anywhere}
+.pdoc .pset{break-inside:avoid;page-break-inside:avoid}
+@media screen{
+  .page .pdoc .pblk.newpage{margin-top:1.4em;border-top:2px dashed #b5b0a5;position:relative}
+  .page .pdoc .pblk.newpage::before{content:"page break";position:absolute;top:-1.25em;right:0;font-size:10px;color:#9a948a;text-transform:uppercase;letter-spacing:.08em}
+}
+@media print{ .pdoc .pblk.newpage{break-before:page;page-break-before:always} }
 .pdoc th{text-align:left;font-size:.7em;text-transform:uppercase;letter-spacing:.06em;color:#555;border-bottom:2px solid #111;padding:.25em .4em}
 .pdoc td{padding:.32em .4em;border-bottom:1px solid #ccc;vertical-align:top}
 .pdoc tr{break-inside:avoid;page-break-inside:avoid}
@@ -857,10 +864,10 @@ function buildDoc(sl){
   const st=S.settings; let cols=st.columns.filter(c=>c.on).map(c=>c.id); if(!cols.length) cols=['title'];
   const c=computeSets(sl), multi=c.sets.length>1;
   const tot = k => (st.showTotals && multi && c.sets[k].count) ? `<tr class="ptot"><td colspan="${cols.length}">Set ${k+1}: ${c.sets[k].count} songs${c.sets[k].music||!c.sets[k].missing?' · '+durText(c.sets[k].total,c.sets[k].missing):''}</td></tr>` : '';
-  let rows='', n=0, si=0, lastGap=false;
+  let rows='', n=0, si=0, lastGap=false; const setRows=[];
   const gap=`<tr class="pgap"><td colspan="${cols.length}"></td></tr>`;
   sl.items.forEach(it=>{
-    if(it.kind==='break'){ rows+=tot(si); si++; rows+=`<tr class="pbreak"><td colspan="${cols.length}">— ${esc(it.label||'Break')}${it.length?` (${fmt(it.length)})`:''} —</td></tr>`; }
+    if(it.kind==='break'){ rows+=tot(si); si++; rows+=`<tr class="pbreak"><td colspan="${cols.length}">— ${esc(it.label||'Break')}${it.length?` (${fmt(it.length)})`:''} —</td></tr>`; setRows.push(rows); rows=''; }
     else { n++; const i2=sl.items.indexOf(it), pv=sl.items[i2-1], nx=sl.items[i2+1]; const fp=pv&&pv.kind==='song'&&pv.segue, tn=it.segue&&nx&&nx.kind==='song';
       const inChain=fp||tn, start=inChain&&!fp, end=inChain&&!tn;
       // Gap rows keep neighbouring segue groups (and plain songs) visually apart.
@@ -871,13 +878,18 @@ function buildDoc(sl){
       return; }
     lastGap=false;
   });
-  rows+=tot(si);
+  rows+=tot(si); setRows.push(rows);
+  const W={num:'2.4em', key:'5.5em', vox:'8.5em', length:'4.2em', tempo:'3.6em', notes:'12em', tags:'8em'};
+  const colg=`<colgroup>${cols.map(k=>`<col${W[k]?` style="width:${W[k]}"`:''}>`).join('')}</colgroup>`;
+  const thead=`<thead><tr>${cols.map(k=>`<th class="c-${k}">${COLS[k]}</th>`).join('')}</tr></thead>`;
+  let firstSet=true;
+  const setBlocks=setRows.filter(r=>r).map(r=>{ const h=firstSet?thead:''; firstSet=false; return `<div class="pblk pset"><table>${colg}${h}<tbody>${r}</tbody></table></div>`; }).join('');
   const sub=[fmtDate(sl.date), sl.venue].filter(Boolean).join(' · ');
   const foot = st.showTotals && c.songs && (c.play || !c.missing) ? `<div class="pfoot">${c.songs} songs · playing time ${durText(c.play,c.missing)}${c.breaks.length&&c.brk?` · with breaks ${durText(c.withBreaks,c.missing)}`:''}</div>` : '';
   return `<div class="pdoc" style="font-size:${st.fontSize}px">
-    <div class="phead">${st.showLogo&&logoSrc()?`<img src="${logoSrc()}" alt="">`:''}<div class="pname">${esc(sl.name)}</div>${sub?`<div class="psub">${esc(sub)}</div>`:''}</div>
-    ${st.showNotes&&sl.notes?`<div class="pnotes">${esc(sl.notes)}</div>`:''}
-    <table><thead><tr>${cols.map(k=>`<th class="c-${k}">${COLS[k]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${foot}</div>`;
+    <div class="pblk phd"><div class="phead">${st.showLogo&&logoSrc()?`<img src="${logoSrc()}" alt="">`:''}<div class="pname">${esc(sl.name)}</div>${sub?`<div class="psub">${esc(sub)}</div>`:''}</div>
+    ${st.showNotes&&sl.notes?`<div class="pnotes">${esc(sl.notes)}</div>`:''}</div>
+    ${setBlocks}${foot?`<div class="pblk">${foot}</div>`:''}</div>`;
 }
 function openPrint(){
   const st=S.settings;
@@ -933,6 +945,23 @@ function fitDoc(doc, paper){
   for(let k=0; k<8 && h>paper.ch; k++){ z=z*paper.ch/h*0.985; doc.style.zoom=z; h=doc.getBoundingClientRect().height; }
   return z;
 }
+/* Flow mode: if a set would spill onto the next page, start it on a new page instead
+   (unless the set is taller than a whole page, or it's the first set under the header). */
+function paginate(doc, paper){
+  const blocks=$$(':scope > .pblk', doc);
+  blocks.forEach(b=>b.classList.remove('newpage'));
+  const top0=doc.getBoundingClientRect().top, H=paper.ch, marks=[];
+  let pageStart=0, pages=1, firstSet=true;
+  blocks.forEach(b=>{
+    const r=b.getBoundingClientRect(), t=r.top-top0, bt=r.bottom-top0, isSet=b.classList.contains('pset');
+    const movable = !(isSet && firstSet) && t>pageStart;
+    if(isSet) firstSet=false;
+    if(bt-pageStart>H && movable && (bt-t)<=H){ marks.push(b); pageStart=t; pages++; }
+    else while(bt-pageStart>H){ pageStart+=H; pages++; }
+  });
+  marks.forEach(b=>b.classList.add('newpage'));
+  return pages;
+}
 function renderPreview(){
   const st=S.settings, paper=PAPER[st.paper]||PAPER.letter, page=$('#ppage'); if(!page) return;
   $('#pageStyle').textContent=`@page{size:${paper.css};margin:0.5in}`;
@@ -940,10 +969,9 @@ function renderPreview(){
   page.innerHTML=buildDoc(cur());
   const doc=$('.pdoc',page);
   const go = () => {
-    let z=1;
-    if(st.fit==='one') z=fitDoc(doc, paper); else doc.style.zoom=1;
-    const h=doc.getBoundingClientRect().height, pages=Math.max(1,Math.ceil(h/paper.ch - 0.01));
-    $('#pinfo').textContent = st.fit==='one' ? (z<1?`Shrunk to ${Math.round(z*100)}% to fit one page`:'Fits on one page at full size') : `About ${pages} page${pages>1?'s':''}`;
+    let z=1, pages=1;
+    if(st.fit==='one') z=fitDoc(doc, paper); else { doc.style.zoom=1; pages=paginate(doc, paper); }
+    $('#pinfo').textContent = st.fit==='one' ? (z<1?`Shrunk to ${Math.round(z*100)}% to fit one page`:'Fits on one page at full size') : `About ${pages} page${pages>1?'s':''}${pages>1?'. Sets that would be split start on a new page.':''}`;
   };
   const img=$('img',doc); if(img && !img.complete) img.onload=go; go();
 }
