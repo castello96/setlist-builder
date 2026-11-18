@@ -105,7 +105,7 @@ table.data tbody tr:hover{background:#fbf7ec}
 #sitems.drop-end::after{content:"";display:block;height:3px;background:var(--orange);margin:0 10px;border-radius:2px}
 .sethead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px 4px;font-weight:800;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
 .sethead span{text-transform:none;letter-spacing:0;font-weight:600;color:var(--muted)}
-.item{display:grid;grid-template-columns:16px 26px minmax(120px,1fr) 70px 130px 52px 30px 30px 30px;gap:6px;align-items:center;padding:5px 10px;border-top:3px solid transparent;border-bottom:1px solid var(--line2);background:#fff}
+.item{display:grid;grid-template-columns:16px 26px minmax(120px,1fr) 56px 110px 100px 52px 30px 30px 30px 30px;gap:6px;align-items:center;padding:5px 10px;border-top:3px solid transparent;border-bottom:1px solid var(--line2);background:#fff}
 .item:hover{background:#fdfbf6}
 .item.drop-before{border-top-color:var(--orange)}
 .item.dragging{opacity:.35}
@@ -128,6 +128,17 @@ table.data tbody tr:hover{background:#fbf7ec}
 .item.chain.c-end{margin-bottom:4px;border-bottom-left-radius:8px}
 .item.chain:not(.c-end){border-bottom:1px dashed #c4c9e6}
 .segtag{display:inline-block;font-size:10px;font-weight:800;color:#fff;background:var(--navy);border-radius:4px;padding:0 5px;margin-right:6px;vertical-align:1px;letter-spacing:.04em}
+.item .tg{display:flex;flex-wrap:wrap;gap:2px;min-width:0}
+.item .tg .tag{margin:0;font-size:10px;padding:0 6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag.clash{background:#fdd9a8;color:#7a3f00;box-shadow:0 0 0 1px #ee9a3a}
+.item.locked{background:#fffaf0}
+.item.locked .n{color:var(--warn);font-weight:800}
+.handle.lockh{cursor:default;font-size:10px;letter-spacing:0;opacity:.8}
+.ib.lk{font-size:12px;filter:grayscale(1);opacity:.3}
+.ib.lk:hover{opacity:.75}
+.ib.lk.on{filter:none;opacity:1;background:#fff1c7}
+.clashnote{color:#8a4b00;font-weight:700}
+.spreadlist{display:flex;flex-wrap:wrap;gap:6px 16px}
 .item.break{grid-template-columns:16px 1fr 90px 30px;background:#f3efe6;margin:6px 0}
 .item.break input{padding:3px 7px}
 .item.break .blabel{font-weight:700}
@@ -251,7 +262,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -540,7 +551,7 @@ function renderBuilder(){
         <div class="list" id="bcat"></div>
       </section>
       <section class="pane">
-        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
+        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
         <div class="list" id="sitems"></div>
       </section>
     </div>`;
@@ -567,11 +578,62 @@ function renderBcat(){
 function updateSelBtn(){ const b=$('#addSelBtn'); if(b){ b.textContent = sel.size ? `Add selected (${sel.size})` : 'Add selected'; b.disabled=!sel.size; } }
 function orderedSel(){ return sortedSongs(S.songs.filter(s=>sel.has(s.id))).map(s=>s.id); }
 function makeItem(s){ return {id:uid(), kind:'song', songId:s.id, title:s.title, key:s.key, vox:[...s.vox], tempo:s.tempo, notes:s.notes, segue:false}; }
-function insertSongs(ids, idx){ const sl=cur(); const items=ids.map(songById).filter(Boolean).map(makeItem); sl.items.splice(idx??sl.items.length, 0, ...items); touch(); renderSetItems(); renderBcat(); }
+function insertSongs(ids, idx){ const sl=cur(); const items=ids.map(songById).filter(Boolean).map(makeItem); sl.items.splice(idx??sl.items.length, 0, ...items); applyLocks(sl); touch(); renderSetItems(); renderBcat(); }
+/* Locked songs keep their slot within their set (or stay last, if locked as the set's last song).
+   After any change, each set is rebuilt: locked songs go back to their slots, unlocked songs fill the rest in order. */
+function applyLocks(sl){
+  if(!sl.items.some(i=>i.locked)) return;
+  const out=[]; let seg=[];
+  const flush = () => {
+    const n=seg.length, res=new Array(n).fill(null);
+    const ends=seg.filter(i=>i.locked && i.lockEnd);
+    ends.forEach((it,k)=>{ res[n-ends.length+k]=it; });
+    seg.filter(i=>i.locked && !i.lockEnd).sort((a,b)=>a.lockPos-b.lockPos).forEach(it=>{
+      const p=Math.max(0, Math.min(it.lockPos||0, n-1)); let q=p;
+      while(q<n && res[q]) q++;
+      if(q>=n){ q=p; while(q>=0 && res[q]) q--; }
+      res[q]=it;
+    });
+    const free=seg.filter(i=>!i.locked); let f=0;
+    for(let k=0;k<n;k++) if(!res[k]) res[k]=free[f++];
+    out.push(...res); seg=[];
+  };
+  sl.items.forEach(it=>{ if(it.kind==='break'){ flush(); out.push(it); } else seg.push(it); });
+  flush();
+  sl.items=out;
+}
+function segueChain(items, idx){
+  let a=idx, b=idx;
+  while(a>0 && items[a-1].kind==='song' && items[a-1].segue) a--;
+  while(b<items.length-1 && items[b].segue && items[b+1].kind==='song') b++;
+  return [a,b];
+}
+function setBounds(items, idx){
+  let s=idx, e=idx;
+  while(s>0 && items[s-1].kind!=='break') s--;
+  while(e<items.length-1 && items[e+1].kind!=='break') e++;
+  return [s,e];
+}
+/* idx -> Set of spread-out tags that are too close to the same tag in this set */
+function tagClashes(sl){
+  const spread=new Set(S.settings.spreadTags||[]), dist=Math.max(1, Number(S.settings.spreadDist)||1), out={};
+  if(!spread.size) return out;
+  const segs=[[]]; sl.items.forEach((it,i)=>{ if(it.kind==='break') segs.push([]); else segs[segs.length-1].push(i); });
+  const tagsOf = i => (songById(sl.items[i].songId)?.tags||[]).filter(t=>spread.has(t));
+  segs.forEach(seg=>seg.forEach((ia,a)=>{
+    const ta=tagsOf(ia); if(!ta.length) return;
+    for(let b=a+1; b<=a+dist && b<seg.length; b++){
+      const ib=seg[b], tb=tagsOf(ib);
+      ta.forEach(t=>{ if(tb.includes(t)){ (out[ia] ||= new Set()).add(t); (out[ib] ||= new Set()).add(t); } });
+    }
+  }));
+  return out;
+}
 function differs(it){ const s=songById(it.songId); if(!s) return false; return (it.key||'')!==(s.key||'') || voxStr(it.vox)!==voxStr(s.vox) || (it.tempo??null)!==(s.tempo??null) || (it.notes||'')!==(s.notes||''); }
 function renderSetItems(){
   const sl=cur(); const c=computeSets(sl);
   const counts={}; sl.items.forEach(i=>{ if(i.kind==='song') counts[i.songId]=(counts[i.songId]||0)+1; });
+  const clash=tagClashes(sl), dist=Math.max(1, Number(S.settings.spreadDist)||1);
   const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>`; };
   let html=head(0), n=0, si=0;
   sl.items.forEach((it,idx)=>{
@@ -587,10 +649,15 @@ function renderSetItems(){
       const prev=sl.items[idx-1], next=sl.items[idx+1];
       const fromPrev = prev && prev.kind==='song' && prev.segue, intoNext = it.segue && next && next.kind==='song';
       const chain = fromPrev||intoNext ? `chain ${fromPrev?'':'c-start'} ${intoNext?'':'c-end'}` : '';
-      html+=`<div class="item ${chain}" draggable="true" data-idx="${idx}">
-        <span class="handle" title="Drag to reorder">⋮⋮</span><span class="n">${n}</span>
+      const tags=songById(it.songId)?.tags||[], cl=clash[idx];
+      const lockTip = it.locked ? (it.lockEnd ? 'Locked as the last song of this set' : `Locked at #${(it.lockPos||0)+1} in this set`) : '';
+      html+=`<div class="item ${chain} ${it.locked?'locked':''}" draggable="${it.locked?'false':'true'}" data-idx="${idx}">
+        ${it.locked?`<span class="handle lockh" title="${lockTip}">🔒</span>`:'<span class="handle" title="Drag to reorder">⋮⋮</span>'}<span class="n">${n}</span>
         <span class="ttl" title="${esc(itemTitle(it))}${it.notes?'\n'+esc(it.notes):''}">${fromPrev?'<span class="segtag" title="Segues in from the previous song">SEGUE</span>':''}${esc(itemTitle(it))}${m?'<span class="badge mash">M</span>':''}${dup?`<span class="badge warn" title="This song is in the setlist ${counts[it.songId]} times">×${counts[it.songId]}</span>`:''}${differs(it)?'<span class="dot" title="Edited for this gig (differs from catalog)">●</span>':''}${m&&itemParts(it)?`<span class="msub">${esc(itemParts(it))}</span>`:''}</span>
-        <span class="k">${esc(it.key)}</span><span class="v">${esc(voxStr(it.vox))}</span><span class="l" data-act="editLen" data-idx="${idx}" title="Click to set length (applies everywhere this song is played)">${fmt(itemLen(it))||'<span class="addlen">+ len</span>'}</span>
+        <span class="k">${esc(it.key)}</span><span class="v">${esc(voxStr(it.vox))}</span>
+        <span class="tg">${tags.map(t=>`<span class="tag ${cl&&cl.has(t)?'clash':''}" title="${cl&&cl.has(t)?`Another ${esc(t)} song is ${dist===1?'right next to this one':`within ${dist} songs`}`:esc(t)}">${esc(t)}</span>`).join('')}</span>
+        <span class="l" data-act="editLen" data-idx="${idx}" title="Click to set length (applies everywhere this song is played)">${fmt(itemLen(it))||'<span class="addlen">+ len</span>'}</span>
+        <button class="ib lk ${it.locked?'on':''}" data-act="lock" data-idx="${idx}" title="${it.locked?lockTip+'. Click to unlock.':'Lock this song’s position in the set (locks its whole segue group)'}">🔒</button>
         <button class="ib seg ${it.segue?'on':''}" data-act="segue" data-idx="${idx}" title="Segue: goes straight into the next song">→</button>
         <button class="ib" data-act="editItem" data-idx="${idx}" title="Edit for this gig">✎</button>
         <button class="ib" data-act="rmItem" data-idx="${idx}" title="Remove from setlist">×</button></div>`;
@@ -607,6 +674,7 @@ function renderSetItems(){
     ${c.brk?`<span>With breaks <b>${durText(c.withBreaks,c.missing)}</b></span>`:''}
     ${c.missing?`<span class="muted">${c.missing} song${c.missing===1?' has':'s have'} no length. Totals are a minimum.</span>`:''}
     <span class="muted">${Number(sl.buffer)||0}s gap between songs, none after a segue</span>
+    ${Object.keys(clash).length?`<span class="clashnote" title="Change which tags are checked in Band settings">⚠ ${Object.keys(clash).length} songs too close to another with the same tag</span>`:''}
     ${voxBalance(sl)}`;
   $$('[data-voxf]').forEach(b=>b.onclick=()=>{ const v=b.dataset.voxf; bf.vox = bf.vox===v ? '' : v; $('#bvox').innerHTML=voxOpts(); $('#bvox').value=bf.vox; renderBcat(); renderSetItems(); });
 }
@@ -629,7 +697,13 @@ ACT.addSel = () => { if(!sel.size) return; insertSongs(orderedSel()); sel.clear(
 ACT.clearSel = () => { sel.clear(); renderBcat(); };
 ACT.addBreak = () => { const sl=cur(); const nb=sl.items.filter(i=>i.kind==='break').length; sl.items.push({id:uid(), kind:'break', label:'Set break', length:null}); touch(); renderSetItems(); const l=$('#sitems'); l.scrollTop=l.scrollHeight; };
 ACT.segue = d => { const it=cur().items[+d.idx]; it.segue=!it.segue; touch(); renderSetItems(); };
-ACT.rmItem = d => { cur().items.splice(+d.idx,1); touch(); renderSetItems(); renderBcat(); };
+ACT.rmItem = d => { const sl=cur(); sl.items.splice(+d.idx,1); applyLocks(sl); touch(); renderSetItems(); renderBcat(); };
+ACT.lock = d => {
+  const sl=cur(), items=sl.items, idx=+d.idx; if(items[idx].kind!=='song') return;
+  const [a,b]=segueChain(items, idx), [s,e]=setBounds(items, idx), on=!items[idx].locked;
+  for(let k=a;k<=b;k++){ const it=items[k]; if(on){ it.locked=true; it.lockEnd=(b===e); it.lockPos=k-s; } else { delete it.locked; delete it.lockEnd; delete it.lockPos; } }
+  touch(); renderSetItems();
+};
 ACT.editItem = d => editItem(+d.idx);
 ACT.editLen = (d, e, el) => {
   const it=cur().items[+d.idx], s=songById(it.songId);
@@ -662,7 +736,19 @@ function wireBuilderDnD(){
   list.addEventListener('drop', e=>{
     if(!drag) return; e.preventDefault(); let i=dropIdx(e.clientY); clear();
     if(drag.src==='cat'){ drag.ids.forEach(id=>sel.delete(id)); insertSongs(drag.ids, i); }
-    else { const items=cur().items; const [m]=items.splice(drag.idx,1); if(drag.idx<i) i--; items.splice(i,0,m); touch(); renderSetItems(); }
+    else {
+      const sl=cur(), items=sl.items, from=drag.idx;
+      if(items[from] && !items[from].locked){
+        const [m]=items.splice(from,1); if(from<i) i--;
+        if(m.kind==='break'){ // a break can't cross a locked song
+          let lo=0, hi=items.length;
+          for(let j=from-1;j>=0;j--) if(items[j].locked){ lo=j+1; break; }
+          for(let j=from;j<items.length;j++) if(items[j].locked){ hi=j; break; }
+          i=Math.max(lo, Math.min(hi, i));
+        }
+        items.splice(i,0,m); applyLocks(sl); touch(); renderSetItems();
+      }
+    }
     drag=null;
   });
   if(!window._dndEnd){ window._dndEnd=1;
@@ -842,6 +928,12 @@ function renderSettings(){
       <div class="row"><input id="mNew" placeholder="Add a member…"><button class="btn" data-act="addMember">Add</button></div>
     </div>
     <div class="card" style="padding:18px">
+      <h2>Spread out tags</h2>
+      <p class="muted" style="margin-top:-6px">In the setlist builder, songs with a checked tag are highlighted when another song with the same tag is too close. A break resets the check.</p>
+      <div class="spreadlist">${allTags().map(t=>`<label class="opt"><input type="checkbox" data-spread="${esc(t)}" ${(S.settings.spreadTags||[]).includes(t)?'checked':''}> ${esc(t)}</label>`).join('') || '<span class="muted">No tags in the catalog yet.</span>'}</div>
+      <label style="margin-top:12px">Warn when within <small>(songs; 1 = back-to-back)</small><input id="spreadDist" inputmode="numeric" value="${S.settings.spreadDist??1}" style="width:80px"></label>
+    </div>
+    <div class="card" style="padding:18px">
       <h2>New setlist defaults</h2>
       <label>Gap between songs <small>(seconds, used for set time estimates)</small><input id="defBuf" inputmode="numeric" value="${S.settings.defaultBuffer??30}" style="width:120px"></label>
       <p class="muted">Each setlist can override this. No gap is counted after a song marked as a segue.</p>
@@ -861,6 +953,8 @@ function renderSettings(){
   </div>`;
   renderMembers();
   $('#mNew').onkeydown=e=>{ if(e.key==='Enter') ACT.addMember(); };
+  $$('[data-spread]').forEach(c=>c.onchange=()=>{ const t=c.dataset.spread, set=new Set(S.settings.spreadTags||[]); c.checked?set.add(t):set.delete(t); S.settings.spreadTags=[...set]; save(); });
+  $('#spreadDist').onchange=e=>{ S.settings.spreadDist=Math.max(1, parseInt(e.target.value)||1); e.target.value=S.settings.spreadDist; save(); };
   $('#defBuf').onchange=e=>{ S.settings.defaultBuffer=numOrNull(e.target.value)??0; save(); };
   $('#logoFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{ const w=Math.min(1000,img.width), h=Math.round(img.height*w/img.width); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); S.settings.logo=cv.toDataURL('image/png'); save(); render(); }; img.src=r.result; }; r.readAsDataURL(f); };
   $('#bandName').onchange=e=>{ const v=e.target.value.trim(); if(!v){ e.target.value=S.band.name; return; } S.band.name=v; save(); render(); };
