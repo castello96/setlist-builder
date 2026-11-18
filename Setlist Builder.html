@@ -665,7 +665,25 @@ function wireBuilderDnD(){
     else { const items=cur().items; const [m]=items.splice(drag.idx,1); if(drag.idx<i) i--; items.splice(i,0,m); touch(); renderSetItems(); }
     drag=null;
   });
-  if(!window._dndEnd){ window._dndEnd=1; document.addEventListener('dragend', ()=>{ drag=null; $('#sitems')?.classList.remove('drop-end'); $$('.drop-before').forEach(x=>x.classList.remove('drop-before')); $$('.dragging').forEach(x=>x.classList.remove('dragging')); }); }
+  if(!window._dndEnd){ window._dndEnd=1;
+    // Auto-scroll the setlist while dragging near (or past) its top/bottom edge.
+    let asY=null, asRaf=null;
+    const ZONE=70, MAX=28;
+    const step = () => {
+      asRaf=null; const l=$('#sitems'); if(!drag || asY==null || !l) return;
+      const r=l.getBoundingClientRect(); let dy=0;
+      if(asY < r.top+ZONE) dy = -Math.min(MAX, Math.ceil((r.top+ZONE-asY)/ZONE*MAX));
+      else if(asY > r.bottom-ZONE) dy = Math.min(MAX, Math.ceil((asY-(r.bottom-ZONE))/ZONE*MAX));
+      if(dy){ const before=l.scrollTop; l.scrollTop+=dy; if(l.scrollTop!==before) asRaf=requestAnimationFrame(step); }
+    };
+    document.addEventListener('dragover', e=>{
+      const l=$('#sitems'); if(!drag || !l) return;
+      const r=l.getBoundingClientRect();
+      asY = (e.clientX>=r.left && e.clientX<=r.right) ? e.clientY : null;
+      if(asY!=null && !asRaf) asRaf=requestAnimationFrame(step);
+    });
+    document.addEventListener('drop', ()=>{ asY=null; });
+    document.addEventListener('dragend', ()=>{ asY=null; drag=null; $('#sitems')?.classList.remove('drop-end'); $$('.drop-before').forEach(x=>x.classList.remove('drop-before')); $$('.dragging').forEach(x=>x.classList.remove('dragging')); }); }
 }
 
 function editItem(idx){
