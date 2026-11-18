@@ -202,7 +202,14 @@ table.data tbody tr:hover{background:#fbf7ec}
 .pdoc .pname{font-size:1.35em;font-weight:800;margin-top:.15em}
 .pdoc .psub{font-size:.9em;color:#555}
 .pdoc .pnotes{font-size:.85em;color:#333;margin:.2em 0 .6em;white-space:pre-wrap;text-align:center}
-.pdoc table{width:100%;border-collapse:collapse}
+.pdoc table{width:100%;border-collapse:collapse;table-layout:fixed}
+.pdoc td{overflow-wrap:anywhere}
+.pdoc .pset{break-inside:avoid;page-break-inside:avoid}
+@media screen{
+  .page .pdoc .pblk.newpage{margin-top:1.4em;border-top:2px dashed #b5b0a5;position:relative}
+  .page .pdoc .pblk.newpage::before{content:"page break";position:absolute;top:-1.25em;right:0;font-size:10px;color:#9a948a;text-transform:uppercase;letter-spacing:.08em}
+}
+@media print{ .pdoc .pblk.newpage{break-before:page;page-break-before:always} }
 .pdoc th{text-align:left;font-size:.7em;text-transform:uppercase;letter-spacing:.06em;color:#555;border-bottom:2px solid #111;padding:.25em .4em}
 .pdoc td{padding:.32em .4em;border-bottom:1px solid #ccc;vertical-align:top}
 .pdoc tr{break-inside:avoid;page-break-inside:avoid}
@@ -216,7 +223,10 @@ table.data tbody tr:hover{background:#fbf7ec}
 .pdoc tr.pchain td{background:#eef0fa}
 .pdoc tr.pchain td:first-child{box-shadow:inset 4px 0 0 #2f3a68}
 .pdoc tr.pchain.pmid td{border-bottom:1px dashed #b9bfdc}
-.pdoc tr.pbreak td{text-align:center;font-weight:800;text-transform:uppercase;letter-spacing:.12em;padding:.7em 0 .5em;border-bottom:2px solid #111;font-size:.85em}
+.pdoc tr.pchain.pstart td{border-top:2px solid #2f3a68}
+.pdoc tr.pchain.pend td{border-bottom:2px solid #2f3a68}
+.pdoc tr.pgap td{height:.5em;padding:0;border:0;background:transparent}
+.pdoc tr.pbreak td{text-align:center;font-weight:800;text-transform:uppercase;letter-spacing:.12em;padding:.55em 0;background:#dcdcdc;color:#222;border-top:2px solid #111;border-bottom:2px solid #111;font-size:.85em}
 .pdoc tr.ptot td{text-align:right;font-size:.75em;color:#555;border-bottom:0;padding-top:.2em}
 .pdoc .pfoot{margin-top:.8em;font-size:.8em;color:#444;text-align:right}
 
@@ -253,7 +263,12 @@ const STORE_KEY = 'setlist-builder-v1';
 const OLD_KEY = 'someguys-setlists-v1';
 const FILE_FORMAT = 'setlist-builder-band';
 const COLS = {num:'#', title:'Song', key:'Key', vox:'Lead vox', length:'Length', tempo:'BPM', notes:'Notes', tags:'Tags'};
-const PAPER = {letter:{w:'8.5in', cw:7.5*96, ch:10*96, css:'letter'}, a4:{w:'210mm', cw:(210-25.4)/25.4*96, ch:(297-25.4)/25.4*96, css:'A4'}};
+const PAPER_IN = {letter:{w:8.5, h:11, css:'letter'}, a4:{w:210/25.4, h:297/25.4, css:'A4'}};
+/* Page geometry in CSS px for the chosen paper and margin (inches). */
+function paperDims(st){
+  const P=PAPER_IN[st.paper]||PAPER_IN.letter, m=Number(st.margin??0.5);
+  return {w:P.w+'in', m, cw:(P.w-2*m)*96, ch:(P.h-2*m)*96, css:P.css};
+}
 
 /* ---------- utils ---------- */
 const $ = (s, r=document) => r.querySelector(s);
@@ -274,7 +289,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, tagColors:{}, showSetVox:true}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, tagColors:{}, showSetVox:true}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -859,19 +874,32 @@ function buildDoc(sl){
   const st=S.settings; let cols=st.columns.filter(c=>c.on).map(c=>c.id); if(!cols.length) cols=['title'];
   const c=computeSets(sl), multi=c.sets.length>1;
   const tot = k => (st.showTotals && multi && c.sets[k].count) ? `<tr class="ptot"><td colspan="${cols.length}">Set ${k+1}: ${c.sets[k].count} songs${c.sets[k].music||!c.sets[k].missing?' · '+durText(c.sets[k].total,c.sets[k].missing):''}</td></tr>` : '';
-  let rows='', n=0, si=0;
+  let rows='', n=0, si=0, lastGap=false; const setRows=[];
+  const gap=`<tr class="pgap"><td colspan="${cols.length}"></td></tr>`;
   sl.items.forEach(it=>{
-    if(it.kind==='break'){ rows+=tot(si); si++; rows+=`<tr class="pbreak"><td colspan="${cols.length}">— ${esc(it.label||'Break')}${it.length?` (${fmt(it.length)})`:''} —</td></tr>`; }
+    if(it.kind==='break'){ rows+=tot(si); si++; rows+=`<tr class="pbreak"><td colspan="${cols.length}">— ${esc(it.label||'Break')}${it.length?` (${fmt(it.length)})`:''} —</td></tr>`; setRows.push(rows); rows=''; }
     else { n++; const i2=sl.items.indexOf(it), pv=sl.items[i2-1], nx=sl.items[i2+1]; const fp=pv&&pv.kind==='song'&&pv.segue, tn=it.segue&&nx&&nx.kind==='song';
-      rows+=`<tr class="${fp||tn?'pchain':''} ${tn?'pmid':''}">${cols.map(k=>`<td class="c-${k}">${cellHtml(k,it,n)}</td>`).join('')}</tr>`; }
+      const inChain=fp||tn, start=inChain&&!fp, end=inChain&&!tn;
+      // Gap rows keep neighbouring segue groups (and plain songs) visually apart.
+      if(start && pv && pv.kind==='song' && !lastGap) rows+=gap;
+      rows+=`<tr class="${inChain?'pchain':''} ${tn?'pmid':''} ${start?'pstart':''} ${end?'pend':''}">${cols.map(k=>`<td class="c-${k}">${cellHtml(k,it,n)}</td>`).join('')}</tr>`;
+      lastGap=false;
+      if(end && nx && nx.kind==='song'){ rows+=gap; lastGap=true; }
+      return; }
+    lastGap=false;
   });
-  rows+=tot(si);
+  rows+=tot(si); setRows.push(rows);
+  const W={num:'2.4em', key:'5.5em', vox:'8.5em', length:'4.2em', tempo:'3.6em', notes:'12em', tags:'8em'};
+  const colg=`<colgroup>${cols.map(k=>`<col${W[k]?` style="width:${W[k]}"`:''}>`).join('')}</colgroup>`;
+  const thead=`<thead><tr>${cols.map(k=>`<th class="c-${k}">${COLS[k]}</th>`).join('')}</tr></thead>`;
+  let firstSet=true;
+  const setBlocks=setRows.filter(r=>r).map(r=>{ const h=firstSet?thead:''; firstSet=false; return `<div class="pblk pset"><table>${colg}${h}<tbody>${r}</tbody></table></div>`; }).join('');
   const sub=[fmtDate(sl.date), sl.venue].filter(Boolean).join(' · ');
   const foot = st.showTotals && c.songs && (c.play || !c.missing) ? `<div class="pfoot">${c.songs} songs · playing time ${durText(c.play,c.missing)}${c.breaks.length&&c.brk?` · with breaks ${durText(c.withBreaks,c.missing)}`:''}</div>` : '';
   return `<div class="pdoc" style="font-size:${st.fontSize}px">
-    <div class="phead">${st.showLogo&&logoSrc()?`<img src="${logoSrc()}" alt="">`:''}<div class="pname">${esc(sl.name)}</div>${sub?`<div class="psub">${esc(sub)}</div>`:''}</div>
-    ${st.showNotes&&sl.notes?`<div class="pnotes">${esc(sl.notes)}</div>`:''}
-    <table><thead><tr>${cols.map(k=>`<th class="c-${k}">${COLS[k]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${foot}</div>`;
+    <div class="pblk phd"><div class="phead">${st.showLogo&&logoSrc()?`<img src="${logoSrc()}" alt="">`:''}<div class="pname">${esc(sl.name)}</div>${sub?`<div class="psub">${esc(sub)}</div>`:''}</div>
+    ${st.showNotes&&sl.notes?`<div class="pnotes">${esc(sl.notes)}</div>`:''}</div>
+    ${setBlocks}${foot?`<div class="pblk">${foot}</div>`:''}</div>`;
 }
 function openPrint(){
   const st=S.settings;
@@ -884,18 +912,20 @@ function openPrint(){
       <label class="opt"><input type="radio" name="fit" value="one" ${st.fit==='one'?'checked':''}> Shrink to fit one page</label>
       <label style="margin-top:8px">Text size <small id="fsv">${st.fontSize}px</small><input type="range" id="pFs" min="10" max="28" value="${st.fontSize}"></label>
       <label>Paper<select id="pPaper"><option value="letter">US Letter</option><option value="a4">A4</option></select></label>
+      <label>Margins<select id="pMargin"><option value="0.5">Normal (½ in)</option><option value="0.35">Narrow (⅜ in)</option><option value="0.25">Small (¼ in)</option><option value="0.15">Tiny (⅛ in)</option></select></label>
       <h3>Show</h3>
       <label class="opt"><input type="checkbox" id="pLogo" ${st.showLogo?'checked':''}> Logo</label>
       <label class="opt"><input type="checkbox" id="pTot" ${st.showTotals?'checked':''}> Set &amp; show times</label>
       <label class="opt"><input type="checkbox" id="pNotes" ${st.showNotes?'checked':''}> Setlist notes</label>
       <label class="opt"><input type="checkbox" id="pParts" ${st.showParts?'checked':''}> Songs inside mashups</label>
-      <p class="muted" style="margin-top:14px">To save a PDF, click Print… and choose “Save as PDF” as the destination. Turn off the browser's “Headers and footers” option for a clean page.</p>
+      <p class="muted" style="margin-top:14px">To save a PDF, click Print… and choose “Save as PDF” as the destination. In the print dialog, leave <b>Margins</b> on “Default” (the margins set here are used) and turn off “Headers and footers”.</p>
     </aside><div><div class="pview"><div class="page" id="ppage"></div></div><div class="pageinfo" id="pinfo"></div></div></div>`, true);
-  $('#pPaper').value=st.paper;
+  $('#pPaper').value=st.paper; $('#pMargin').value=String(st.margin??0.5);
   const upd = () => { save(); renderPreview(); };
   $$('input[name=fit]').forEach(r=>r.onchange=()=>{ st.fit=r.value; upd(); });
   $('#pFs').oninput=e=>{ st.fontSize=+e.target.value; $('#fsv').textContent=st.fontSize+'px'; upd(); };
   $('#pPaper').onchange=e=>{ st.paper=e.target.value; upd(); };
+  $('#pMargin').onchange=e=>{ st.margin=Number(e.target.value); upd(); };
   $('#pLogo').onchange=e=>{ st.showLogo=e.target.checked; upd(); };
   $('#pTot').onchange=e=>{ st.showTotals=e.target.checked; upd(); };
   $('#pNotes').onchange=e=>{ st.showNotes=e.target.checked; upd(); };
@@ -924,20 +954,36 @@ function renderColList(){
 function fitDoc(doc, paper){
   doc.style.zoom=1;
   let z=1, h=doc.getBoundingClientRect().height;
-  for(let k=0; k<8 && h>paper.ch; k++){ z=z*paper.ch/h*0.985; doc.style.zoom=z; h=doc.getBoundingClientRect().height; }
+  for(let k=0; k<8 && h>paper.ch; k++){ z=z*paper.ch/h*0.995; doc.style.zoom=z; h=doc.getBoundingClientRect().height; }
   return z;
 }
+/* Flow mode: if a set would spill onto the next page, start it on a new page instead
+   (unless the set is taller than a whole page, or it's the first set under the header). */
+function paginate(doc, paper){
+  const blocks=$$(':scope > .pblk', doc);
+  blocks.forEach(b=>b.classList.remove('newpage'));
+  const top0=doc.getBoundingClientRect().top, H=paper.ch, marks=[];
+  let pageStart=0, pages=1, firstSet=true;
+  blocks.forEach(b=>{
+    const r=b.getBoundingClientRect(), t=r.top-top0, bt=r.bottom-top0, isSet=b.classList.contains('pset');
+    const movable = !(isSet && firstSet) && t>pageStart;
+    if(isSet) firstSet=false;
+    if(bt-pageStart>H && movable && (bt-t)<=H){ marks.push(b); pageStart=t; pages++; }
+    else while(bt-pageStart>H){ pageStart+=H; pages++; }
+  });
+  marks.forEach(b=>b.classList.add('newpage'));
+  return pages;
+}
 function renderPreview(){
-  const st=S.settings, paper=PAPER[st.paper]||PAPER.letter, page=$('#ppage'); if(!page) return;
-  $('#pageStyle').textContent=`@page{size:${paper.css};margin:0.5in}`;
-  page.style.width=paper.w; page.style.minHeight=`calc(${paper.ch}px + 1in)`;
+  const st=S.settings, paper=paperDims(st), page=$('#ppage'); if(!page) return;
+  $('#pageStyle').textContent=`@page{size:${paper.css};margin:${paper.m}in}`;
+  page.style.width=paper.w; page.style.padding=paper.m+'in'; page.style.minHeight=`calc(${paper.ch}px + ${2*paper.m}in)`;
   page.innerHTML=buildDoc(cur());
   const doc=$('.pdoc',page);
   const go = () => {
-    let z=1;
-    if(st.fit==='one') z=fitDoc(doc, paper); else doc.style.zoom=1;
-    const h=doc.getBoundingClientRect().height, pages=Math.max(1,Math.ceil(h/paper.ch - 0.01));
-    $('#pinfo').textContent = st.fit==='one' ? (z<1?`Shrunk to ${Math.round(z*100)}% to fit one page`:'Fits on one page at full size') : `About ${pages} page${pages>1?'s':''}`;
+    let z=1, pages=1;
+    if(st.fit==='one') z=fitDoc(doc, paper); else { doc.style.zoom=1; pages=paginate(doc, paper); }
+    $('#pinfo').textContent = st.fit==='one' ? (z<1?`Shrunk to ${Math.round(z*100)}% to fit one page`:'Fits on one page at full size') : `About ${pages} page${pages>1?'s':''}${pages>1?'. Sets that would be split start on a new page.':''}`;
   };
   const img=$('img',doc); if(img && !img.complete) img.onload=go; go();
 }
