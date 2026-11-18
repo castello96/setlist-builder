@@ -212,6 +212,9 @@ table.data tbody tr:hover{background:#fbf7ec}
 .pdoc tr.pchain td{background:#eef0fa}
 .pdoc tr.pchain td:first-child{box-shadow:inset 4px 0 0 #2f3a68}
 .pdoc tr.pchain.pmid td{border-bottom:1px dashed #b9bfdc}
+.pdoc tr.pchain.pstart td{border-top:2px solid #2f3a68}
+.pdoc tr.pchain.pend td{border-bottom:2px solid #2f3a68}
+.pdoc tr.pgap td{height:.5em;padding:0;border:0;background:transparent}
 .pdoc tr.pbreak td{text-align:center;font-weight:800;text-transform:uppercase;letter-spacing:.12em;padding:.7em 0 .5em;border-bottom:2px solid #111;font-size:.85em}
 .pdoc tr.ptot td{text-align:right;font-size:.75em;color:#555;border-bottom:0;padding-top:.2em}
 .pdoc .pfoot{margin-top:.8em;font-size:.8em;color:#444;text-align:right}
@@ -854,11 +857,19 @@ function buildDoc(sl){
   const st=S.settings; let cols=st.columns.filter(c=>c.on).map(c=>c.id); if(!cols.length) cols=['title'];
   const c=computeSets(sl), multi=c.sets.length>1;
   const tot = k => (st.showTotals && multi && c.sets[k].count) ? `<tr class="ptot"><td colspan="${cols.length}">Set ${k+1}: ${c.sets[k].count} songs${c.sets[k].music||!c.sets[k].missing?' · '+durText(c.sets[k].total,c.sets[k].missing):''}</td></tr>` : '';
-  let rows='', n=0, si=0;
+  let rows='', n=0, si=0, lastGap=false;
+  const gap=`<tr class="pgap"><td colspan="${cols.length}"></td></tr>`;
   sl.items.forEach(it=>{
     if(it.kind==='break'){ rows+=tot(si); si++; rows+=`<tr class="pbreak"><td colspan="${cols.length}">— ${esc(it.label||'Break')}${it.length?` (${fmt(it.length)})`:''} —</td></tr>`; }
     else { n++; const i2=sl.items.indexOf(it), pv=sl.items[i2-1], nx=sl.items[i2+1]; const fp=pv&&pv.kind==='song'&&pv.segue, tn=it.segue&&nx&&nx.kind==='song';
-      rows+=`<tr class="${fp||tn?'pchain':''} ${tn?'pmid':''}">${cols.map(k=>`<td class="c-${k}">${cellHtml(k,it,n)}</td>`).join('')}</tr>`; }
+      const inChain=fp||tn, start=inChain&&!fp, end=inChain&&!tn;
+      // Gap rows keep neighbouring segue groups (and plain songs) visually apart.
+      if(start && pv && pv.kind==='song' && !lastGap) rows+=gap;
+      rows+=`<tr class="${inChain?'pchain':''} ${tn?'pmid':''} ${start?'pstart':''} ${end?'pend':''}">${cols.map(k=>`<td class="c-${k}">${cellHtml(k,it,n)}</td>`).join('')}</tr>`;
+      lastGap=false;
+      if(end && nx && nx.kind==='song'){ rows+=gap; lastGap=true; }
+      return; }
+    lastGap=false;
   });
   rows+=tot(si);
   const sub=[fmtDate(sl.date), sl.venue].filter(Boolean).join(' · ');
