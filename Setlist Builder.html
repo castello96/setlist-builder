@@ -105,6 +105,12 @@ table.data tbody tr:hover{background:#fbf7ec}
 #sitems.drop-end::after{content:"";display:block;height:3px;background:var(--orange);margin:0 10px;border-radius:2px}
 .sethead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px 4px;font-weight:800;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
 .sethead span{text-transform:none;letter-spacing:0;font-weight:600;color:var(--muted)}
+.setvox{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0 12px 6px}
+.setvox .svl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.sv{font:inherit;font-size:11px;border:1px solid var(--line);border-radius:12px;padding:0 8px;background:#fff;cursor:pointer;color:var(--text);line-height:18px}
+.sv:hover{border-color:#c9c2b2}
+.sv b{color:var(--navy);margin-left:3px}
+.sv.on{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
 .item{display:grid;grid-template-columns:16px 26px minmax(120px,1fr) 56px 110px 100px 52px 30px 30px 30px 30px;gap:6px;align-items:center;padding:5px 10px;border-top:3px solid transparent;border-bottom:1px solid var(--line2);background:#fff}
 .item:hover{background:#fdfbf6}
 .item.drop-before{border-top-color:var(--orange)}
@@ -262,7 +268,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1, showSetVox:true}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -551,7 +557,7 @@ function renderBuilder(){
         <div class="list" id="bcat"></div>
       </section>
       <section class="pane">
-        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
+        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><button class="btn sm ${S.settings.showSetVox?'primary':''}" data-act="toggleSetVox" id="setVoxBtn" title="Show or hide how many songs each person sings in each set">Vox per set</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
         <div class="list" id="sitems"></div>
       </section>
     </div>`;
@@ -634,7 +640,7 @@ function renderSetItems(){
   const sl=cur(); const c=computeSets(sl);
   const counts={}; sl.items.forEach(i=>{ if(i.kind==='song') counts[i.songId]=(counts[i.songId]||0)+1; });
   const clash=tagClashes(sl), dist=Math.max(1, Number(S.settings.spreadDist)||1);
-  const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>`; };
+  const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVox(st.songs):''}`; };
   let html=head(0), n=0, si=0;
   sl.items.forEach((it,idx)=>{
     if(it.kind==='break'){
@@ -678,6 +684,20 @@ function renderSetItems(){
     ${voxBalance(sl)}`;
   $$('[data-voxf]').forEach(b=>b.onclick=()=>{ const v=b.dataset.voxf; bf.vox = bf.vox===v ? '' : v; $('#bvox').innerHTML=voxOpts(); $('#bvox').value=bf.vox; renderBcat(); renderSetItems(); });
 }
+function voxTally(songs){
+  const solo={}, shared={};
+  songs.forEach(it=>{ const v=it.vox||[]; v.forEach(n=>{ const o=v.length>1?shared:solo; o[n]=(o[n]||0)+1; }); });
+  const seen=new Set([...Object.keys(solo),...Object.keys(shared)]);
+  const names=[...S.settings.members, ...[...seen].filter(n=>n!=='All' && !S.settings.members.includes(n)), 'All'].filter(n=>seen.has(n));
+  return {solo, shared, names, none:songs.filter(i=>!(i.vox||[]).length).length};
+}
+function setVox(songs){
+  if(!songs.length) return '';
+  const {solo, shared, names, none}=voxTally(songs);
+  return `<div class="setvox"><span class="svl">Vox</span>${names.map(n=>{ const a=solo[n]||0, b=shared[n]||0, t=a+b;
+    return `<button class="sv ${bf.vox===n?'on':''}" data-voxf="${esc(n)}" title="${esc(n)}: ${t} song${t===1?'':'s'} in this set${b?` (${a} solo, ${b} shared)`:''}\nClick to filter the catalog to ${esc(n)}'s songs">${esc(n)}<b>${t}</b></button>`; }).join('')}${none?`<span class="muted">${none} with no vox</span>`:''}</div>`;
+}
+ACT.toggleSetVox = () => { S.settings.showSetVox=!S.settings.showSetVox; save(); $('#setVoxBtn').classList.toggle('primary', S.settings.showSetVox); renderSetItems(); };
 function voxBalance(sl){
   const songs=sl.items.filter(i=>i.kind==='song');
   if(!songs.length) return '';
