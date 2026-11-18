@@ -259,7 +259,12 @@ const STORE_KEY = 'setlist-builder-v1';
 const OLD_KEY = 'someguys-setlists-v1';
 const FILE_FORMAT = 'setlist-builder-band';
 const COLS = {num:'#', title:'Song', key:'Key', vox:'Lead vox', length:'Length', tempo:'BPM', notes:'Notes', tags:'Tags'};
-const PAPER = {letter:{w:'8.5in', cw:7.5*96, ch:10*96, css:'letter'}, a4:{w:'210mm', cw:(210-25.4)/25.4*96, ch:(297-25.4)/25.4*96, css:'A4'}};
+const PAPER_IN = {letter:{w:8.5, h:11, css:'letter'}, a4:{w:210/25.4, h:297/25.4, css:'A4'}};
+/* Page geometry in CSS px for the chosen paper and margin (inches). */
+function paperDims(st){
+  const P=PAPER_IN[st.paper]||PAPER_IN.letter, m=Number(st.margin??0.5);
+  return {w:P.w+'in', m, cw:(P.w-2*m)*96, ch:(P.h-2*m)*96, css:P.css};
+}
 
 /* ---------- utils ---------- */
 const $ = (s, r=document) => r.querySelector(s);
@@ -280,7 +285,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1, showSetVox:true}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, spreadTags:['holiday','halloween'], spreadDist:1, showSetVox:true}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -902,18 +907,20 @@ function openPrint(){
       <label class="opt"><input type="radio" name="fit" value="one" ${st.fit==='one'?'checked':''}> Shrink to fit one page</label>
       <label style="margin-top:8px">Text size <small id="fsv">${st.fontSize}px</small><input type="range" id="pFs" min="10" max="28" value="${st.fontSize}"></label>
       <label>Paper<select id="pPaper"><option value="letter">US Letter</option><option value="a4">A4</option></select></label>
+      <label>Margins<select id="pMargin"><option value="0.5">Normal (½ in)</option><option value="0.35">Narrow (⅜ in)</option><option value="0.25">Small (¼ in)</option><option value="0.15">Tiny (⅛ in)</option></select></label>
       <h3>Show</h3>
       <label class="opt"><input type="checkbox" id="pLogo" ${st.showLogo?'checked':''}> Logo</label>
       <label class="opt"><input type="checkbox" id="pTot" ${st.showTotals?'checked':''}> Set &amp; show times</label>
       <label class="opt"><input type="checkbox" id="pNotes" ${st.showNotes?'checked':''}> Setlist notes</label>
       <label class="opt"><input type="checkbox" id="pParts" ${st.showParts?'checked':''}> Songs inside mashups</label>
-      <p class="muted" style="margin-top:14px">To save a PDF, click Print… and choose “Save as PDF” as the destination. Turn off the browser's “Headers and footers” option for a clean page.</p>
+      <p class="muted" style="margin-top:14px">To save a PDF, click Print… and choose “Save as PDF” as the destination. In the print dialog, leave <b>Margins</b> on “Default” (the margins set here are used) and turn off “Headers and footers”.</p>
     </aside><div><div class="pview"><div class="page" id="ppage"></div></div><div class="pageinfo" id="pinfo"></div></div></div>`, true);
-  $('#pPaper').value=st.paper;
+  $('#pPaper').value=st.paper; $('#pMargin').value=String(st.margin??0.5);
   const upd = () => { save(); renderPreview(); };
   $$('input[name=fit]').forEach(r=>r.onchange=()=>{ st.fit=r.value; upd(); });
   $('#pFs').oninput=e=>{ st.fontSize=+e.target.value; $('#fsv').textContent=st.fontSize+'px'; upd(); };
   $('#pPaper').onchange=e=>{ st.paper=e.target.value; upd(); };
+  $('#pMargin').onchange=e=>{ st.margin=Number(e.target.value); upd(); };
   $('#pLogo').onchange=e=>{ st.showLogo=e.target.checked; upd(); };
   $('#pTot').onchange=e=>{ st.showTotals=e.target.checked; upd(); };
   $('#pNotes').onchange=e=>{ st.showNotes=e.target.checked; upd(); };
@@ -942,7 +949,7 @@ function renderColList(){
 function fitDoc(doc, paper){
   doc.style.zoom=1;
   let z=1, h=doc.getBoundingClientRect().height;
-  for(let k=0; k<8 && h>paper.ch; k++){ z=z*paper.ch/h*0.985; doc.style.zoom=z; h=doc.getBoundingClientRect().height; }
+  for(let k=0; k<8 && h>paper.ch; k++){ z=z*paper.ch/h*0.995; doc.style.zoom=z; h=doc.getBoundingClientRect().height; }
   return z;
 }
 /* Flow mode: if a set would spill onto the next page, start it on a new page instead
@@ -963,9 +970,9 @@ function paginate(doc, paper){
   return pages;
 }
 function renderPreview(){
-  const st=S.settings, paper=PAPER[st.paper]||PAPER.letter, page=$('#ppage'); if(!page) return;
-  $('#pageStyle').textContent=`@page{size:${paper.css};margin:0.5in}`;
-  page.style.width=paper.w; page.style.minHeight=`calc(${paper.ch}px + 1in)`;
+  const st=S.settings, paper=paperDims(st), page=$('#ppage'); if(!page) return;
+  $('#pageStyle').textContent=`@page{size:${paper.css};margin:${paper.m}in}`;
+  page.style.width=paper.w; page.style.padding=paper.m+'in'; page.style.minHeight=`calc(${paper.ch}px + ${2*paper.m}in)`;
   page.innerHTML=buildDoc(cur());
   const doc=$('.pdoc',page);
   const go = () => {
