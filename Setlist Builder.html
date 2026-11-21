@@ -105,6 +105,15 @@ table.data tbody tr:hover{background:#fbf7ec}
 #sitems.drop-end::after{content:"";display:block;height:3px;background:var(--orange);margin:0 10px;border-radius:2px}
 .sethead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px 4px;font-weight:800;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
 .sethead span{text-transform:none;letter-spacing:0;font-weight:600;color:var(--muted)}
+.sethead .shl{display:flex;align-items:center;gap:8px;color:var(--navy);font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.setctl{display:inline-flex;align-items:center;gap:4px;text-transform:none;letter-spacing:0}
+.colhead{display:grid;grid-template-columns:16px 26px minmax(120px,1fr) 56px 110px 100px 52px 30px 30px 30px 30px;gap:6px;align-items:center;padding:2px 10px;border-bottom:1px solid var(--line)}
+.ch{font:inherit;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;background:none;border:0;padding:3px 4px;margin-left:-4px;text-align:left;cursor:pointer;border-radius:5px;white-space:nowrap}
+.ch:hover{background:var(--line2);color:var(--text)}
+.ch.on{color:var(--navy)}
+.ch.r{text-align:right;margin-left:0;margin-right:-4px;justify-self:end}
+.ch i{font-style:normal;font-size:9px;margin-left:3px}
+.ib.shuf{font-size:13px;height:22px;width:26px}
 .setvox{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0 12px 6px}
 .setvox .svl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
 .sv{font:inherit;font-size:11px;border:1px solid var(--line);border-radius:12px;padding:0 8px;background:#fff;cursor:pointer;color:var(--text);line-height:18px}
@@ -352,7 +361,9 @@ function banner(msg){ $('#banner').innerHTML = msg ? `<div class="banner">${esc(
 const songById = id => S.songs.find(s=>s.id===id);
 function itemLen(it){ const s=songById(it.songId); return s ? s.length : it.length; }
 const cur = () => S.setlists.find(s=>s.id===curId);
-function touch(){ const sl=cur(); if(sl) sl.updated=Date.now(); save(); }
+function touch(){ const sl=cur(); if(sl){ sl.updated=Date.now(); if(!rearranging) delete arrHist[sl.id]; } save(); }
+/* Undo history for sort/shuffle only (in memory, last 10). Any other edit clears it so undo never discards later work. */
+const arrHist={}; let rearranging=false;
 const logoSrc = () => S.settings.logo || '';
 const TAG_COLORS = {
   red:['#fde2e1','#9b1c1c'], orange:['#ffe4c7','#9a4a00'], yellow:['#fff1b8','#715400'], green:['#d9f2df','#1e6b3a'],
@@ -596,7 +607,7 @@ function renderBuilder(){
         <div class="list" id="bcat"></div>
       </section>
       <section class="pane">
-        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><button class="btn sm ${S.settings.showSetVox?'primary':''}" data-act="toggleSetVox" id="setVoxBtn" title="Show or hide how many songs each person sings in each set">Vox per set</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
+        <div class="ptools"><span class="ptitle">Setlist</span><button class="btn sm" data-act="addBreak">+ Break</button><button class="btn sm ${S.settings.showSetVox?'primary':''}" data-act="toggleSetVox" id="setVoxBtn" title="Show or hide how many songs each person sings in each set">Vox per set</button><button class="btn sm" data-act="shuffleAll" title="Shuffle every set (songs stay in their own set; locked songs stay put)">🔀 Shuffle all sets</button><button class="btn sm" data-act="undoArr" id="undoBtn" title="Undo the last sort or shuffle" disabled>↶ Undo</button><span class="grow"></span><span class="muted">Drag ⋮⋮ to reorder · 🔒 = locked position · <b>→</b> = segue into next · <span style="color:var(--orange)">●</span> = edited for this gig</span></div>
         <div class="list" id="sitems"></div>
       </section>
     </div>`;
@@ -663,7 +674,13 @@ function differs(it){ const s=songById(it.songId); if(!s) return false; return (
 function renderSetItems(){
   const sl=cur(); const c=computeSets(sl);
   const counts={}; sl.items.forEach(i=>{ if(i.kind==='song') counts[i.songId]=(counts[i.songId]||0)+1; });
-  const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); return `<div class="sethead">Set ${k+1}<span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVoxRow(st.songs, sl):''}`; };
+  const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); const m=sortMem[curId+':'+k];
+    const ctl = st.count>1 ? `<span class="setctl"><button class="ib shuf" data-act="shuffleSet" data-set="${k}" title="Shuffle this set (locked songs stay put, segue groups stay together)">🔀</button></span>` : '';
+    return `<div class="sethead"><span class="shl">Set ${k+1}${ctl}</span><span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVoxRow(st.songs, sl):''}${st.count>1?colHead(k, m):''}`; };
+  const colHead = (k, m) => {
+    const h = (key, label, cls='') => `<button class="ch ${cls} ${m&&m.key===key?'on':''}" data-act="sortCol" data-set="${k}" data-key="${key}" title="Sort this set by ${SORTS[key].label.toLowerCase()} (click again to reverse). Locked songs stay put; segue groups stay together.">${label}<i>${m&&m.key===key?(m.dir>0?'▲':'▼'):''}</i></button>`;
+    return `<div class="colhead"><span></span><span></span>${h('title','Song')}${h('key','Key')}${h('vox','Vox')}${h('tag','Tags')}${h('length','Len','r')}<span></span><span></span><span></span><span></span></div>`;
+  };
   let html=head(0), n=0, si=0;
   sl.items.forEach((it,idx)=>{
     if(it.kind==='break'){
@@ -694,6 +711,7 @@ function renderSetItems(){
   });
   if(!sl.items.length) html+='<div class="empty">Drag songs here from the catalog, double-click a song, or select several and click “Add selected”.</div>';
   $('#sitems').innerHTML=html;
+  const ub=$('#undoBtn'); if(ub){ const n=(arrHist[sl.id]||[]).length; ub.disabled=!n; ub.textContent = n ? `↶ Undo (${n})` : '↶ Undo'; }
   $$('[data-blabel]').forEach(i=>i.onchange=()=>{ sl.items[+i.dataset.blabel].label=i.value.trim(); touch(); });
   $$('[data-blen]').forEach(i=>i.onchange=()=>{ sl.items[+i.dataset.blen].length=parseLen(i.value); touch(); renderSetItems(); });
   // summary
@@ -755,6 +773,63 @@ ACT.clearSel = () => { sel.clear(); renderBcat(); };
 ACT.addBreak = () => { const sl=cur(); const nb=sl.items.filter(i=>i.kind==='break').length; sl.items.push({id:uid(), kind:'break', label:'Set break', length:null}); touch(); renderSetItems(); const l=$('#sitems'); l.scrollTop=l.scrollHeight; };
 ACT.segue = d => { const it=cur().items[+d.idx]; it.segue=!it.segue; touch(); renderSetItems(); };
 ACT.rmItem = d => { const sl=cur(); sl.items.splice(+d.idx,1); applyLocks(sl); touch(); renderSetItems(); renderBcat(); };
+/* ---------- sort & shuffle ---------- */
+function setRanges(items){ const r=[]; let a=0; items.forEach((it,i)=>{ if(it.kind==='break'){ r.push([a,i]); a=i+1; } }); r.push([a,items.length]); return r; }
+/* Rearrange the unlocked part of set k. Segue groups move as one unit; locked units stay in their slots. */
+function rearrangeSet(sl, k, order){
+  const rg=setRanges(sl.items)[k]; if(!rg) return false;
+  const [a,b]=rg, seg=sl.items.slice(a,b); if(seg.length<2) return false;
+  const units=[]; for(let i=0;i<seg.length;){ let j=i; while(j<seg.length-1 && seg[j].segue) j++; units.push(seg.slice(i,j+1)); i=j+1; }
+  const isFixed=u=>u.some(x=>x.locked);
+  const res=new Array(seg.length).fill(null); let pos=0;
+  units.forEach(u=>{ if(isFixed(u)) u.forEach((x,o)=>{ res[pos+o]=x; }); pos+=u.length; });
+  const rest=order(units.filter(u=>!isFixed(u)));
+  for(let i=0;i<res.length;){
+    if(res[i]){ i++; continue; }
+    let j=i; while(j<res.length && !res[j]) j++;
+    let p=i, left=j-i;
+    while(left>0 && rest.length){ const ix=rest.findIndex(u=>u.length<=left); if(ix<0) break; const u=rest.splice(ix,1)[0]; u.forEach(x=>{ res[p++]=x; }); left-=u.length; }
+    i=j;
+  }
+  if(rest.length){ const flat=rest.flat(); for(let i=0;i<res.length;i++) if(!res[i]) res[i]=flat.shift(); }
+  sl.items.splice(a, b-a, ...res); return true;
+}
+const SORTS={
+  title:{label:'Title', v:it=>sortTitle(itemTitle(it))||null},
+  key:{label:'Key', v:it=>(it.key||'').trim()||null},
+  vox:{label:'Lead vox', v:it=>(it.vox||[])[0]||null},
+  tag:{label:'Tag', v:it=>[...(songById(it.songId)?.tags||[])].sort()[0]||null},
+  length:{label:'Length', v:it=>itemLen(it)??null}};
+const sortMem={};
+const sortUnits=(key,dir)=>us=>[...us].sort((x,y)=>{
+  const a=SORTS[key].v(x[0]), b=SORTS[key].v(y[0]);
+  if(a==null||b==null) return (a==null)-(b==null);
+  return (typeof a==='number' ? a-b : String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'}))*dir; });
+const shuffleUnits=us=>{
+  const ids=u=>u.map(x=>x[0].id).join();
+  for(let t=0;t<8;t++){ const a=[...us]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } if(us.length<2 || ids(a)!==ids(us)) return a; }
+  return us; };
+function withHistory(fn){
+  const sl=cur(), snap=clone(sl.items);
+  rearranging=true;
+  try{ if(fn(sl)){ (arrHist[sl.id] ||= []).push(snap); if(arrHist[sl.id].length>10) arrHist[sl.id].shift(); touch(); } }
+  finally{ rearranging=false; }
+  renderSetItems();
+}
+function sortSet(k, key){
+  const m=sortMem[curId+':'+k], dir = m && m.key===key ? -m.dir : 1;
+  sortMem[curId+':'+k]={key, dir};
+  withHistory(sl=>rearrangeSet(sl, k, sortUnits(key, dir)));
+}
+ACT.sortCol = d => sortSet(+d.set, d.key);
+ACT.shuffleSet = d => { delete sortMem[curId+':'+d.set]; withHistory(sl=>rearrangeSet(sl, +d.set, shuffleUnits)); };
+ACT.shuffleAll = () => { withHistory(sl=>{ let any=false; setRanges(sl.items).forEach((_,k)=>{ delete sortMem[curId+':'+k]; any=rearrangeSet(sl,k,shuffleUnits)||any; }); return any; }); };
+ACT.undoArr = () => {
+  const sl=cur(), h=arrHist[sl.id]; if(!h || !h.length) return;
+  sl.items=h.pop(); rearranging=true; try{ touch(); } finally{ rearranging=false; }
+  Object.keys(sortMem).forEach(k=>{ if(k.startsWith(curId+':')) delete sortMem[k]; });
+  renderSetItems(); renderBcat();
+};
 ACT.lock = d => {
   const sl=cur(), items=sl.items, idx=+d.idx; if(items[idx].kind!=='song') return;
   const [a,b]=segueChain(items, idx), [s,e]=setBounds(items, idx), on=!items[idx].locked;
