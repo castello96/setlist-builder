@@ -107,7 +107,12 @@ table.data tbody tr:hover{background:#fbf7ec}
 .sethead span{text-transform:none;letter-spacing:0;font-weight:600;color:var(--muted)}
 .sethead .shl{display:flex;align-items:center;gap:8px;color:var(--navy);font-weight:800;text-transform:uppercase;letter-spacing:.06em}
 .setctl{display:inline-flex;align-items:center;gap:4px;text-transform:none;letter-spacing:0}
-.sortsel{font-size:11px;padding:1px 4px;border-radius:6px;color:var(--muted);font-weight:600;height:22px}
+.colhead{display:grid;grid-template-columns:16px 26px minmax(120px,1fr) 56px 110px 100px 52px 30px 30px 30px 30px;gap:6px;align-items:center;padding:2px 10px;border-bottom:1px solid var(--line)}
+.ch{font:inherit;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;background:none;border:0;padding:3px 4px;margin-left:-4px;text-align:left;cursor:pointer;border-radius:5px;white-space:nowrap}
+.ch:hover{background:var(--line2);color:var(--text)}
+.ch.on{color:var(--navy)}
+.ch.r{text-align:right;margin-left:0;margin-right:-4px;justify-self:end}
+.ch i{font-style:normal;font-size:9px;margin-left:3px}
 .ib.shuf{font-size:13px;height:22px;width:26px}
 .setvox{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0 12px 6px}
 .setvox .svl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
@@ -670,8 +675,12 @@ function renderSetItems(){
   const sl=cur(); const c=computeSets(sl);
   const counts={}; sl.items.forEach(i=>{ if(i.kind==='song') counts[i.songId]=(counts[i.songId]||0)+1; });
   const head = k => { const st=c.sets[k]; const cls=targetCls(st.total, sl.setTarget); const m=sortMem[curId+':'+k];
-    const ctl = st.count>1 ? `<span class="setctl"><select class="sortsel" data-sortset="${k}" title="Sort this set (locked songs stay put, segue groups stay together)"><option value="">Sort…</option>${Object.entries(SORTS).map(([key,o])=>`<option value="${key}">${o.label}${m&&m.key===key?(m.dir>0?' ▲':' ▼'):''}</option>`).join('')}</select><button class="ib shuf" data-act="shuffleSet" data-set="${k}" title="Shuffle this set (locked songs stay put, segue groups stay together)">🔀</button></span>` : '';
-    return `<div class="sethead"><span class="shl">Set ${k+1}${ctl}</span><span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVoxRow(st.songs, sl):''}`; };
+    const ctl = st.count>1 ? `<span class="setctl"><button class="ib shuf" data-act="shuffleSet" data-set="${k}" title="Shuffle this set (locked songs stay put, segue groups stay together)">🔀</button></span>` : '';
+    return `<div class="sethead"><span class="shl">Set ${k+1}${ctl}</span><span>${st.count} song${st.count===1?'':'s'}${st.count?` · <span class="${cls}">${durText(st.total,st.missing)}</span>`:''}${sl.setTarget?` / ${sl.setTarget}:00`:''}${st.missing&&st.count?` · ${st.missing} without length`:''}</span></div>${S.settings.showSetVox?setVoxRow(st.songs, sl):''}${st.count>1?colHead(k, m):''}`; };
+  const colHead = (k, m) => {
+    const h = (key, label, cls='') => `<button class="ch ${cls} ${m&&m.key===key?'on':''}" data-act="sortCol" data-set="${k}" data-key="${key}" title="Sort this set by ${SORTS[key].label.toLowerCase()} (click again to reverse). Locked songs stay put; segue groups stay together.">${label}<i>${m&&m.key===key?(m.dir>0?'▲':'▼'):''}</i></button>`;
+    return `<div class="colhead"><span></span><span></span>${h('title','Song')}${h('key','Key')}${h('vox','Vox')}${h('tag','Tags')}${h('length','Len','r')}<span></span><span></span><span></span><span></span></div>`;
+  };
   let html=head(0), n=0, si=0;
   sl.items.forEach((it,idx)=>{
     if(it.kind==='break'){
@@ -702,7 +711,6 @@ function renderSetItems(){
   });
   if(!sl.items.length) html+='<div class="empty">Drag songs here from the catalog, double-click a song, or select several and click “Add selected”.</div>';
   $('#sitems').innerHTML=html;
-  $$('[data-sortset]').forEach(x=>x.onchange=()=>{ const key=x.value; if(key) sortSet(+x.dataset.sortset, key); });
   const ub=$('#undoBtn'); if(ub){ const n=(arrHist[sl.id]||[]).length; ub.disabled=!n; ub.textContent = n ? `↶ Undo (${n})` : '↶ Undo'; }
   $$('[data-blabel]').forEach(i=>i.onchange=()=>{ sl.items[+i.dataset.blabel].label=i.value.trim(); touch(); });
   $$('[data-blen]').forEach(i=>i.onchange=()=>{ sl.items[+i.dataset.blen].length=parseLen(i.value); touch(); renderSetItems(); });
@@ -813,6 +821,7 @@ function sortSet(k, key){
   sortMem[curId+':'+k]={key, dir};
   withHistory(sl=>rearrangeSet(sl, k, sortUnits(key, dir)));
 }
+ACT.sortCol = d => sortSet(+d.set, d.key);
 ACT.shuffleSet = d => { delete sortMem[curId+':'+d.set]; withHistory(sl=>rearrangeSet(sl, +d.set, shuffleUnits)); };
 ACT.shuffleAll = () => { withHistory(sl=>{ let any=false; setRanges(sl.items).forEach((_,k)=>{ delete sortMem[curId+':'+k]; any=rearrangeSet(sl,k,shuffleUnits)||any; }); return any; }); };
 ACT.undoArr = () => {
