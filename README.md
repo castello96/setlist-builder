@@ -10,6 +10,8 @@ A single-file, offline setlist builder for any band or event. Open `Setlist Buil
 - **Per-gig overrides**: key, vox, tempo, and notes can change for one setlist without touching the catalog. Length is global.
 - **Set times**: per-set and whole-show totals, with a configurable gap between songs (no gap counted after a segue) and optional targets.
 - **Print / PDF**: band logo, selectable and reorderable columns, multi-page flow or shrink-to-fit-one-page, Letter or A4.
+- **Lyrics**: store plain lyrics on each song, or lyrics with chords written inline like `[G]Last Christmas I [Em]gave you my heart`. Pasting chords-above-lyrics converts automatically.
+- **Lyrics book**: one iPad-sized (3:4) PDF per setlist, with one song per page in setlist order. Each page shows the singers and key, and segue cues and "next" cues. A linked setlist cover page is optional. Chords can be shown or hidden, and they're transposed to the gig's key. Save it to the iPad (Books or Files) and it works offline.
 
 ## Band files
 
