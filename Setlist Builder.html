@@ -69,6 +69,7 @@ table.data tbody tr:hover{background:#fbf7ec}
 .bhead .nameinput{font-size:20px;font-weight:700;color:var(--navy);border-color:transparent;background:transparent;padding:4px 8px;width:320px}
 .bhead .nameinput:hover{border-color:var(--line)}
 .bhead label input{width:100%}
+.bhead .bacts{display:flex;gap:8px;flex-wrap:nowrap;margin-left:auto}
 .bhead .w-date{width:150px}.bhead .w-venue{width:180px}.bhead .w-num{width:110px}
 .summary{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:8px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:13px}
 .summary b{color:var(--navy)}
@@ -669,10 +670,10 @@ function renderBuilder(){
       <label>Per-set target <small>(min)</small><input id="slSetTarget" class="w-num" inputmode="numeric" value="${sl.setTarget??''}" placeholder="e.g. 45"></label>
       <label>Gap between songs <small>(sec)</small><input id="slBuffer" class="w-num" inputmode="numeric" value="${sl.buffer??''}"></label>
       <span class="grow"></span>
-      <button class="btn" data-act="slNotes">Notes${sl.notes?' •':''}</button>
+      <span class="bacts"><button class="btn" data-act="slNotes">Notes${sl.notes?' •':''}</button>
       <button class="btn" data-act="lyricsBook" title="Build an iPad lyrics book PDF for this setlist">Lyrics book</button>
       <button class="btn" data-act="spotify" title="Turn this setlist into a Spotify playlist">Spotify</button>
-      <button class="btn primary" data-act="print">Print / PDF</button>
+      <button class="btn primary" data-act="print">Print / PDF</button></span>
     </div>
     <div class="summary" id="slSummary"></div>
     <div class="builder">
@@ -1535,7 +1536,9 @@ function renderSpStat(el, after){
 }
 
 /* matching */
-const spTrack = t => ({id:t.id, uri:t.uri, name:t.name, artists:(t.artists||[]).map(a=>a.name).join(', '), album:t.album?.name||'', year:(t.album?.release_date||'').slice(0,4), url:t.external_urls?.spotify||''});
+const spTrack = t => ({id:t.id, uri:t.uri, name:t.name, artists:(t.artists||[]).map(a=>a.name).join(', '), album:t.album?.name||'', year:(t.album?.release_date||'').slice(0,4), url:t.external_urls?.spotify||'', ms:t.duration_ms||null});
+/* Fill a song's length from its Spotify match, only when the length is blank. */
+function spFillLen(s){ const ms=s.spotify&&s.spotify.ms; if(ms && (s.length==null||s.length==='')){ s.length=Math.round(ms/1000); return true; } return false; }
 async function spSearch(q){ const j=await spApi('/search?'+new URLSearchParams({q, type:'track', limit:'10'})); return (j?.tracks?.items||[]).filter(Boolean).map(spTrack); }
 const spNorm = x => String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/^the\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
 const spBaseTitle = s => s.title.replace(/\s*\([^)]*\)\s*$/,'').trim() || s.title;
@@ -1566,12 +1569,13 @@ function openSpotify(){
   openModal(`<div class="toolbar"><h2 style="margin:0">Spotify playlist</h2><span class="grow"></span><button class="btn" data-close>Close</button></div>
     <div class="spstat" id="spS"></div>
     <div id="spBody"></div>`, true);
+  $$('[data-close]',$('#modal')).forEach(b=>b.onclick=()=>{ closeModal(); renderBuilder(); });   // show any new lengths
   const body=$('#spBody');
   const draw = () => {
     renderSpStat($('#spS'), draw);
     const E=spEntries(sl), uniq=[...new Map(E.map(e=>[e.s.id,e.s])).values()];
     const un=uniq.filter(s=>!s.spotify), auto=uniq.filter(s=>s.spotify&&s.spotify.auto), ok=E.filter(e=>e.s.spotify&&e.s.spotify.uri).length;
-    const conn=!!spTok(), pl=sl.spotify;
+    const conn=!!spTok(), pl=sl.spotify, noLen=uniq.filter(s=>s.spotify&&s.spotify.uri&&(s.length==null||s.length===''));
     body.innerHTML = `
       ${spCanAuth()?'':`<p class="spwarn">Spotify sign-in only works when this app is opened from a web address (https, or http://127.0.0.1), not as a file. See Band settings → Spotify.</p>`}
       <div class="g3" style="grid-template-columns:2fr 1fr 1fr;align-items:end">
@@ -1581,6 +1585,7 @@ function openSpotify(){
       </div>
       <div class="toolbar">
         <button class="btn" id="spMatch" ${conn&&un.length&&!st.busy?'':'disabled'}>Find matches for ${un.length} song${un.length===1?'':'s'}</button>
+        ${noLen.length?`<button class="btn" id="spLens" ${conn&&!st.busy?'':'disabled'} title="Only blank lengths are filled; lengths you've entered are never changed">Fill ${noLen.length} blank length${noLen.length===1?'':'s'} from Spotify</button>`:''}
         <span class="grow"></span>
         <span class="muted">${ok} of ${E.length} tracks matched${auto.length?` · ${auto.length} auto-matched, worth a glance`:''}</span>
         ${pl&&pl.id?`<button class="btn" id="spNew" ${conn&&ok&&!st.busy?'':'disabled'}>Create a new playlist</button><button class="btn primary" id="spUpd" ${conn&&ok&&!st.busy?'':'disabled'}>Update playlist</button>`
@@ -1599,6 +1604,7 @@ function openSpotify(){
       }).join('') || '<tr><td class="empty">No songs in this setlist yet.</td></tr>'}</tbody></table>`;
     $('#spName').onchange=e=>{ if(sl.spotify) { sl.spotify.name=e.target.value.trim(); touch(); } };
     $('#spMatch').onclick=matchAll;
+    $('#spLens')&&($('#spLens').onclick=fillLens);
     $('#spNew').onclick=()=>exportPl(false);
     $('#spUpd')&&($('#spUpd').onclick=()=>exportPl(true));
     $$('[data-spok]',body).forEach(b=>b.onclick=()=>{ delete songById(b.dataset.spok).spotify.auto; save(); draw(); });
@@ -1613,19 +1619,32 @@ function openSpotify(){
     try{
       const r=await spSearch($('#spQ').value.trim());
       box.innerHTML = r.map((t,i)=>`<button data-pick="${i}"><span><b>${esc(t.name)}</b> <span class="sa">— ${esc(t.artists)}</span></span><span class="sa">${esc(t.album)}${t.year?` (${t.year})`:''}</span></button>`).join('') || '<span class="muted">No results. Try different words.</span>';
-      $$('[data-pick]',box).forEach(b=>b.onclick=()=>{ s.spotify=r[+b.dataset.pick]; st.open=null; save(); draw(); });
+      $$('[data-pick]',box).forEach(b=>b.onclick=()=>{ s.spotify=r[+b.dataset.pick]; spFillLen(s); st.open=null; save(); draw(); });
     }catch(e){ box.innerHTML=`<span class="muted">${esc(e.message)}</span>`; if(e.status===401) draw(); }
   }
   async function matchAll(){
     const todo=[...new Map(spEntries(sl).map(e=>[e.s.id,e.s])).values()].filter(s=>!s.spotify);
-    st.busy=true; draw(); let found=0, missing=0;
+    st.busy=true; draw(); let found=0, missing=0, lens=0;
     try{
       for(let i=0;i<todo.length;i++){
         say(`Searching Spotify… ${i+1} of ${todo.length}`);
         const t=await spAutoMatch(todo[i]);
-        if(t){ todo[i].spotify={...t, auto:true}; found++; } else missing++;
+        if(t){ todo[i].spotify={...t, auto:true}; if(spFillLen(todo[i])) lens++; found++; } else missing++;
       }
-      say(`Matched ${found}${missing?`; ${missing} not found — use Find to search by hand, or Skip`:''}. Auto-matches (≈) are the top search result, so give them a quick look.`);
+      say(`Matched ${found}${missing?`; ${missing} not found — use Find to search by hand, or Skip`:''}${lens?`. Filled in ${lens} blank length${lens===1?'':'s'} from Spotify`:''}. Auto-matches (≈) are the top search result, so give them a quick look.`);
+    }catch(e){ say(`Stopped: ${esc(e.message)}`); }
+    st.busy=false; save(); draw();
+  }
+  async function fillLens(){
+    const todo=[...new Map(spEntries(sl).map(e=>[e.s.id,e.s])).values()].filter(s=>s.spotify&&s.spotify.uri&&(s.length==null||s.length===''));
+    st.busy=true; draw(); let n=0;
+    try{
+      for(let i=0;i<todo.length;i++){
+        const s=todo[i]; say(`Getting lengths from Spotify… ${i+1} of ${todo.length}`);
+        if(!s.spotify.ms && s.spotify.id){ const t=await spApi(`/tracks/${s.spotify.id}`); s.spotify.ms=t?.duration_ms||null; }
+        if(spFillLen(s)) n++;
+      }
+      say(`Filled in ${n} length${n===1?'':'s'} from Spotify (the recorded length; edit any that run differently live).`);
     }catch(e){ say(`Stopped: ${esc(e.message)}`); }
     st.busy=false; save(); draw();
   }
