@@ -69,6 +69,7 @@ table.data tbody tr:hover{background:#fbf7ec}
 .bhead .nameinput{font-size:20px;font-weight:700;color:var(--navy);border-color:transparent;background:transparent;padding:4px 8px;width:320px}
 .bhead .nameinput:hover{border-color:var(--line)}
 .bhead label input{width:100%}
+.bhead .bacts{display:flex;gap:8px;flex-wrap:nowrap;margin-left:auto}
 .bhead .w-date{width:150px}.bhead .w-venue{width:180px}.bhead .w-num{width:110px}
 .summary{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:8px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:12px;font-size:13px}
 .summary b{color:var(--navy)}
@@ -264,6 +265,13 @@ table.data tbody tr:hover{background:#fbf7ec}
 .lytext .lysec{font-weight:800;text-transform:uppercase;font-size:.7em;letter-spacing:.08em;color:#777;margin:.55em 0 .1em}
 .badge.lyr{background:#e6f2ea;color:var(--ok)}
 .badge.chd{background:#dce7ff;color:#1d4ea8}
+.badge.sp{background:#dff5e6;color:#1a7f45}
+.fsp{margin-bottom:10px}
+.fsp .flab{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px}
+.fsp .flab small{font-weight:400}
+.fsprow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.spdiff{background:#fff6e0;border:1px solid #f0d58a;border-radius:8px;padding:8px 10px;margin-top:6px;font-size:13px;display:flex;flex-direction:column;gap:6px}
+.spdiff .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .bookwrap{display:grid;grid-template-columns:280px 1fr;gap:20px}
 .bookwrap aside{display:flex;flex-direction:column;gap:8px}
 .chlist{margin:-4px 0 4px 22px;display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto}
@@ -525,6 +533,7 @@ function matches(s, f){
   if(f.missing && s.key && s.vox.length) return false;
   if(f.nolyrics && (s.lyrics||'').trim()) return false;
   if(f.noartist && (s.type==='mashup' || (s.artist||'').trim())) return false;
+  if(f.nospotify && (s.type==='mashup' || s.spotify)) return false;
   if(f.type && s.type!==f.type) return false;
   return true;
 }
@@ -540,6 +549,7 @@ function renderCatalog(){
       <select id="ctype"><option value="">Songs &amp; mashups</option><option value="song">Songs only</option><option value="mashup">Mashups only</option></select>
       <label class="opt"><input type="checkbox" id="cmiss" ${cat.missing?'checked':''}> Missing key or vox</label>
       <label class="opt"><input type="checkbox" id="cnoart" ${cat.noartist?'checked':''}> No artist</label>
+      <label class="opt"><input type="checkbox" id="cnosp" ${cat.nospotify?'checked':''}> Not linked to Spotify</label>
       <label class="opt"><input type="checkbox" id="cnoly" ${cat.nolyrics?'checked':''}> No lyrics yet</label>
     </div>
     <div class="tablewrap"><table class="data"><thead><tr>
@@ -553,6 +563,7 @@ function renderCatalog(){
   $('#cmiss').onchange=e=>{cat.missing=e.target.checked; renderCatTable();};
   $('#cnoly').onchange=e=>{cat.nolyrics=e.target.checked; renderCatTable();};
   $('#cnoart').onchange=e=>{cat.noartist=e.target.checked; renderCatTable();};
+  $('#cnosp').onchange=e=>{cat.nospotify=e.target.checked; renderCatTable();};
   renderCatTable();
 }
 function renderCatTable(){
@@ -562,7 +573,7 @@ function renderCatTable(){
   $('#catCount').textContent = `${list.length} of ${S.songs.length}`;
   const bl='<span class="blank">—</span>';
   $('#ctbody').innerHTML = list.map(s=>`<tr data-act="editSong" data-id="${s.id}">
-    <td><b>${esc(s.title)}</b>${s.lyrics?(hasChords(s.lyrics)?'<span class="badge chd" title="Lyrics with chords saved">CHORDS</span>':'<span class="badge lyr" title="Lyrics saved">LYRICS</span>'):''}${s.type==='mashup'?`<span class="badge mash">MASHUP</span><div class="msub">${esc(mashupParts(s))}</div>`:''}</td>
+    <td><b>${esc(s.title)}</b>${s.spotify&&s.spotify.uri?`<span class="badge sp" title="Linked to Spotify: ${esc(s.spotify.name)} — ${esc(s.spotify.artists)}">♫</span>`:''}${s.lyrics?(hasChords(s.lyrics)?'<span class="badge chd" title="Lyrics with chords saved">CHORDS</span>':'<span class="badge lyr" title="Lyrics saved">LYRICS</span>'):''}${s.type==='mashup'?`<span class="badge mash">MASHUP</span><div class="msub">${esc(mashupParts(s))}</div>`:''}</td>
     <td>${esc(songArtist(s))||bl}</td><td>${esc(s.key)||bl}</td><td>${esc(voxStr(s.vox))||bl}</td><td>${fmt(s.length)||bl}</td><td>${s.tempo??bl}</td>
     <td>${s.tags.map(t=>tagChip(t)).join('')}</td><td class="muted">${esc(s.notes)}</td></tr>`).join('') || `<tr><td colspan="8" class="empty">No songs match.</td></tr>`;
 }
@@ -593,6 +604,7 @@ function editSong(id, asMashup){
       <div class="row"><input id="mPick" list="songTitles" placeholder="Type a song title…"><button class="btn" id="mAdd" type="button">Add</button></div></label></div>
     <label>Title<input id="fTitle" value="${esc(s.title)}"></label>
     <label id="fArtistL" style="display:${isM?'none':''}">Artist <small>(the original artist for covers)</small><input id="fArtist" list="artistList" value="${esc(s.artist||'')}"></label>
+    <div class="fsp" id="fSpWrap" style="display:${isM?'none':''}"><div class="flab">Spotify <small>(the recording used for playlists)</small></div><div id="fSpBox"></div></div>
     <label>Lead vox <small>(click to toggle; numbers show order)</small>${voxPicker('fVox', s.vox)}</label>
     <div class="g3">
       <label>Key<input id="fKey" value="${esc(s.key)}"></label>
@@ -609,6 +621,43 @@ function editSong(id, asMashup){
     ${id?`<div class="cmpnote">Used in ${used} setlist${used===1?'':'s'}. Length applies everywhere. Each setlist keeps its own copy of key, vox, tempo and notes, so changing those here won't alter past setlists.</div>`:''}
     <div class="mfoot">${id?'<button class="btn danger" id="fDel">Delete</button>':''}<span class="grow"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="fSave">Save</button></div>`);
   wireChips('#fTags'); wireVox('fVox'); wireLyricsBox('#fLyrics', '#fLyPrev', s);
+  /* Spotify link: staged here, saved with the song */
+  let spPick = s.spotify ? clone(s.spotify) : null, spDiff=false, spOpen=false;
+  const spBox = () => {
+    const el=$('#fSpBox'); if(!el) return; const m=spPick, conn=!!spTok();
+    const stat = !m ? '<span class="muted">Not linked yet.</span>' : m.none ? '<span class="muted">Marked as not on Spotify (skipped in playlists).</span>'
+      : `<span>${m.auto?'≈':'✓'} <b>${esc(m.name)}</b> <span class="muted">— ${esc(m.artists)}${m.album?` · ${esc(m.album)}`:''}${m.year?` (${m.year})`:''}${m.ms?` · ${fmt(m.ms/1000)}`:''}</span>${m.url?` <a href="${esc(m.url)}" target="_blank" rel="noopener" title="Open in Spotify">↗</a>`:''}</span>`;
+    let diffs='';
+    if(spDiff && m && m.uri){
+      const rows=[], cur=f=>$('#'+f).value.trim();
+      const t=spCleanTitle(m.name); if(t && t!==cur('fTitle')) rows.push(['fTitle','Title',cur('fTitle'),t]);
+      if(m.artists && m.artists!==cur('fArtist')) rows.push(['fArtist','Artist',cur('fArtist'),m.artists]);
+      if(m.ms){ const L=parseLen(cur('fLen')), sp=Math.round(m.ms/1000); if(L!=null && Math.abs(L-sp)>=2) rows.push(['fLen','Length',fmt(L),fmt(sp)]); }
+      if(rows.length) diffs=`<div class="spdiff"><div class="muted">Spotify has this differently. Use Spotify's version?</div>${rows.map(([f,l,a,b])=>`<div class="row"><span><b>${l}:</b> ${a?esc(a):'<i>blank</i>'} → <b>${esc(b)}</b></span><button class="btn" type="button" data-spuse="${f}" data-v="${esc(b)}">Use</button></div>`).join('')}${rows.length>1?'<div><button class="btn" type="button" id="fSpAll">Use all</button></div>':''}</div>`;
+    }
+    el.innerHTML = `<div class="fsprow">${stat}<span class="grow"></span>
+      ${conn?`<button class="btn" type="button" id="fSpFind">${m&&m.uri?'Change':'Find on Spotify'}</button>`:`<span class="muted">Connect Spotify (Band settings) to search.</span>`}
+      ${m?`<button class="btn" type="button" id="fSpClr">${m.none?'Undo':'Unlink'}</button>`:`<button class="btn" type="button" id="fSpNone" title="Skip this song in playlists">Not on Spotify</button>`}</div>
+      ${spOpen?`<div class="spfind"><div class="row"><input id="fSpQ" value="${esc((spBaseTitle({title:$('#fTitle').value})+' '+$('#fArtist').value).trim())}"><button class="btn" type="button" id="fSpGo">Search</button></div><div class="spres" id="fSpRes"><span class="muted">Searching…</span></div></div>`:''}${diffs}`;
+    $('#fSpFind')&&($('#fSpFind').onclick=()=>{ spOpen=!spOpen; spBox(); if(spOpen) spFind(); });
+    $('#fSpClr')&&($('#fSpClr').onclick=()=>{ spPick=null; spDiff=false; spBox(); });
+    $('#fSpNone')&&($('#fSpNone').onclick=()=>{ spPick={none:true}; spDiff=false; spOpen=false; spBox(); });
+    if(spOpen){ $('#fSpGo').onclick=spFind; $('#fSpQ').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); spFind(); } }; }
+    $$('[data-spuse]',el).forEach(b=>b.onclick=()=>{ $('#'+b.dataset.spuse).value=b.dataset.v; spBox(); });
+    $('#fSpAll')&&($('#fSpAll').onclick=()=>{ $$('[data-spuse]',el).forEach(b=>{ $('#'+b.dataset.spuse).value=b.dataset.v; }); spBox(); });
+  };
+  async function spFind(){
+    const box=$('#fSpRes'); if(!box) return; box.innerHTML='<span class="muted">Searching…</span>';
+    try{
+      const r=await spSearch($('#fSpQ').value.trim());
+      box.innerHTML = r.map((t,i)=>`<button type="button" data-pick="${i}"><span><b>${esc(t.name)}</b> <span class="sa">— ${esc(t.artists)}</span></span><span class="sa">${esc(t.album)}${t.year?` (${t.year})`:''}${t.ms?` · ${fmt(t.ms/1000)}`:''}</span></button>`).join('') || '<span class="muted">No results. Try different words.</span>';
+      $$('[data-pick]',box).forEach(b=>b.onclick=()=>{ spPick=r[+b.dataset.pick]; spOpen=false; spDiff=true;
+        if(!$('#fLen').value.trim() && spPick.ms) $('#fLen').value=fmt(spPick.ms/1000);
+        spBox(); });
+    }catch(e){ box.innerHTML=`<span class="muted">${esc(e.message)}</span>`; }
+  }
+  ['fTitle','fArtist','fLen'].forEach(f=>$('#'+f).addEventListener('input', ()=>{ if(spDiff) spBox(); }));
+  spBox();
   $('#artistList').innerHTML=[...new Set(S.songs.map(x=>x.artist).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}">`).join('');
   const head = () => { $('#fHead').textContent = `${id?'Edit':'New'} ${isM?'mashup':'song'}`; $('#fTitle').placeholder = isM?'Defaults to Song A / Song B':''; };
   const renderParts = () => {
@@ -619,13 +668,14 @@ function editSong(id, asMashup){
   const syncTitle = () => { const t=$('#fTitle'), a=autoTitle(); if(!t.value.trim() || t.value===lastAuto) t.value=a; lastAuto=a; };
   const add = () => { const raw=$('#mPick').value.trim(); if(!raw) return; const m=S.songs.find(x=>x.type==='song' && x.id!==s.id && x.title.toLowerCase()===raw.toLowerCase()); parts.push(m?m.id:{title:raw}); $('#mPick').value=''; syncTitle(); renderParts(); $('#mPick').focus(); };
   $('#mAdd').onclick=add; $('#mPick').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } };
-  $('#fIsM').onchange=e=>{ isM=e.target.checked; $('#mBox').style.display=isM?'block':'none'; $('#fArtistL').style.display=isM?'none':''; head(); if(isM) $('#mPick').focus(); };
+  $('#fIsM').onchange=e=>{ isM=e.target.checked; $('#mBox').style.display=isM?'block':'none'; $('#fArtistL').style.display=isM?'none':''; $('#fSpWrap').style.display=isM?'none':''; head(); if(isM) $('#mPick').focus(); };
   head(); renderParts();
   $('#fSave').onclick = () => {
     const title=$('#fTitle').value.trim() || (isM?autoTitle():'');
     if(!title){ $('#fTitle').focus(); $('#fTitle').style.borderColor='var(--danger)'; return; }
     if(isM && parts.length<2){ alert('A mashup needs at least 2 songs.'); return; }
     Object.assign(s, {type:isM?'mashup':'song', title, artist:isM?'':$('#fArtist').value.trim(), key:$('#fKey').value.trim(), vox:readVox('fVox'), length:parseLen($('#fLen').value), tempo:numOrNull($('#fTempo').value), tags:parseTags($('#fTags').value), notes:$('#fNotes').value.trim(), parts:isM?parts:[], lyrics:$('#fLyrics').value.replace(/\s+$/,''), noBook:$('#fNoBook').checked, bookChords:$('#fBookCh').checked});
+    if(isM || !spPick) delete s.spotify; else s.spotify=spPick;
     if(!id) S.songs.push(s);
     save(); closeModal(); render();
   };
@@ -669,10 +719,10 @@ function renderBuilder(){
       <label>Per-set target <small>(min)</small><input id="slSetTarget" class="w-num" inputmode="numeric" value="${sl.setTarget??''}" placeholder="e.g. 45"></label>
       <label>Gap between songs <small>(sec)</small><input id="slBuffer" class="w-num" inputmode="numeric" value="${sl.buffer??''}"></label>
       <span class="grow"></span>
-      <button class="btn" data-act="slNotes">Notes${sl.notes?' •':''}</button>
+      <span class="bacts"><button class="btn" data-act="slNotes">Notes${sl.notes?' •':''}</button>
       <button class="btn" data-act="lyricsBook" title="Build an iPad lyrics book PDF for this setlist">Lyrics book</button>
       <button class="btn" data-act="spotify" title="Turn this setlist into a Spotify playlist">Spotify</button>
-      <button class="btn primary" data-act="print">Print / PDF</button>
+      <button class="btn primary" data-act="print">Print / PDF</button></span>
     </div>
     <div class="summary" id="slSummary"></div>
     <div class="builder">
@@ -1409,7 +1459,7 @@ function renderSettings(){
   $('#defBuf').onchange=e=>{ S.settings.defaultBuffer=numOrNull(e.target.value)??0; save(); };
   $('#logoFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{ const w=Math.min(1000,img.width), h=Math.round(img.height*w/img.width); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); S.settings.logo=cv.toDataURL('image/png'); save(); render(); }; img.src=r.result; }; r.readAsDataURL(f); };
   $('#bandName').onchange=e=>{ const v=e.target.value.trim(); if(!v){ e.target.value=S.band.name; return; } S.band.name=v; save(); render(); };
-  $('#spCid').onchange=e=>{ S.settings.spotify.clientId=e.target.value.trim(); save(); };
+  $('#spCid').oninput=e=>{ S.settings.spotify.clientId=e.target.value.trim(); save(); renderSpStat($('#spStat')); };
   $('#spCopy').onclick=()=>{ navigator.clipboard?.writeText(spRedirect()); $('#spCopy').textContent='Copied'; };
   renderSpStat($('#spStat'));
   $('#importCsv').onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ const r=importCsv(t); $('#csvMsg').textContent=r; }); };
@@ -1535,9 +1585,13 @@ function renderSpStat(el, after){
 }
 
 /* matching */
-const spTrack = t => ({id:t.id, uri:t.uri, name:t.name, artists:(t.artists||[]).map(a=>a.name).join(', '), album:t.album?.name||'', year:(t.album?.release_date||'').slice(0,4), url:t.external_urls?.spotify||''});
+const spTrack = t => ({id:t.id, uri:t.uri, name:t.name, artists:(t.artists||[]).map(a=>a.name).join(', '), album:t.album?.name||'', year:(t.album?.release_date||'').slice(0,4), url:t.external_urls?.spotify||'', ms:t.duration_ms||null});
+/* Fill a song's length from its Spotify match, only when the length is blank. */
+function spFillLen(s){ const ms=s.spotify&&s.spotify.ms; if(ms && (s.length==null||s.length==='')){ s.length=Math.round(ms/1000); return true; } return false; }
 async function spSearch(q){ const j=await spApi('/search?'+new URLSearchParams({q, type:'track', limit:'10'})); return (j?.tracks?.items||[]).filter(Boolean).map(spTrack); }
 const spNorm = x => String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/^the\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
+/* Spotify titles often carry release noise: "Song - 2011 Remaster", "Song (Live)", "Song (feat. X)" */
+const spCleanTitle = n => String(n||'').replace(/\s+-\s+[^-]*\b(remaster(ed)?|live|version|edit|mono|stereo|mix|single|demo|from)\b.*$/i,'').replace(/\s*[([][^)\]]*\b(remaster(ed)?|live|version|edit|mono|stereo|mix|feat\.?|ft\.|with)\b[^)\]]*[)\]]\s*$/i,'').trim();
 const spBaseTitle = s => s.title.replace(/\s*\([^)]*\)\s*$/,'').trim() || s.title;
 async function spAutoMatch(s){
   const title=spBaseTitle(s);
@@ -1566,12 +1620,13 @@ function openSpotify(){
   openModal(`<div class="toolbar"><h2 style="margin:0">Spotify playlist</h2><span class="grow"></span><button class="btn" data-close>Close</button></div>
     <div class="spstat" id="spS"></div>
     <div id="spBody"></div>`, true);
+  $$('[data-close]',$('#modal')).forEach(b=>b.onclick=()=>{ closeModal(); renderBuilder(); });   // show any new lengths
   const body=$('#spBody');
   const draw = () => {
     renderSpStat($('#spS'), draw);
     const E=spEntries(sl), uniq=[...new Map(E.map(e=>[e.s.id,e.s])).values()];
     const un=uniq.filter(s=>!s.spotify), auto=uniq.filter(s=>s.spotify&&s.spotify.auto), ok=E.filter(e=>e.s.spotify&&e.s.spotify.uri).length;
-    const conn=!!spTok(), pl=sl.spotify;
+    const conn=!!spTok(), pl=sl.spotify, noLen=uniq.filter(s=>s.spotify&&s.spotify.uri&&(s.length==null||s.length===''));
     body.innerHTML = `
       ${spCanAuth()?'':`<p class="spwarn">Spotify sign-in only works when this app is opened from a web address (https, or http://127.0.0.1), not as a file. See Band settings → Spotify.</p>`}
       <div class="g3" style="grid-template-columns:2fr 1fr 1fr;align-items:end">
@@ -1581,6 +1636,7 @@ function openSpotify(){
       </div>
       <div class="toolbar">
         <button class="btn" id="spMatch" ${conn&&un.length&&!st.busy?'':'disabled'}>Find matches for ${un.length} song${un.length===1?'':'s'}</button>
+        ${noLen.length?`<button class="btn" id="spLens" ${conn&&!st.busy?'':'disabled'} title="Only blank lengths are filled; lengths you've entered are never changed">Fill ${noLen.length} blank length${noLen.length===1?'':'s'} from Spotify</button>`:''}
         <span class="grow"></span>
         <span class="muted">${ok} of ${E.length} tracks matched${auto.length?` · ${auto.length} auto-matched, worth a glance`:''}</span>
         ${pl&&pl.id?`<button class="btn" id="spNew" ${conn&&ok&&!st.busy?'':'disabled'}>Create a new playlist</button><button class="btn primary" id="spUpd" ${conn&&ok&&!st.busy?'':'disabled'}>Update playlist</button>`
@@ -1599,6 +1655,7 @@ function openSpotify(){
       }).join('') || '<tr><td class="empty">No songs in this setlist yet.</td></tr>'}</tbody></table>`;
     $('#spName').onchange=e=>{ if(sl.spotify) { sl.spotify.name=e.target.value.trim(); touch(); } };
     $('#spMatch').onclick=matchAll;
+    $('#spLens')&&($('#spLens').onclick=fillLens);
     $('#spNew').onclick=()=>exportPl(false);
     $('#spUpd')&&($('#spUpd').onclick=()=>exportPl(true));
     $$('[data-spok]',body).forEach(b=>b.onclick=()=>{ delete songById(b.dataset.spok).spotify.auto; save(); draw(); });
@@ -1613,19 +1670,32 @@ function openSpotify(){
     try{
       const r=await spSearch($('#spQ').value.trim());
       box.innerHTML = r.map((t,i)=>`<button data-pick="${i}"><span><b>${esc(t.name)}</b> <span class="sa">— ${esc(t.artists)}</span></span><span class="sa">${esc(t.album)}${t.year?` (${t.year})`:''}</span></button>`).join('') || '<span class="muted">No results. Try different words.</span>';
-      $$('[data-pick]',box).forEach(b=>b.onclick=()=>{ s.spotify=r[+b.dataset.pick]; st.open=null; save(); draw(); });
+      $$('[data-pick]',box).forEach(b=>b.onclick=()=>{ s.spotify=r[+b.dataset.pick]; spFillLen(s); st.open=null; save(); draw(); });
     }catch(e){ box.innerHTML=`<span class="muted">${esc(e.message)}</span>`; if(e.status===401) draw(); }
   }
   async function matchAll(){
     const todo=[...new Map(spEntries(sl).map(e=>[e.s.id,e.s])).values()].filter(s=>!s.spotify);
-    st.busy=true; draw(); let found=0, missing=0;
+    st.busy=true; draw(); let found=0, missing=0, lens=0;
     try{
       for(let i=0;i<todo.length;i++){
         say(`Searching Spotify… ${i+1} of ${todo.length}`);
         const t=await spAutoMatch(todo[i]);
-        if(t){ todo[i].spotify={...t, auto:true}; found++; } else missing++;
+        if(t){ todo[i].spotify={...t, auto:true}; if(spFillLen(todo[i])) lens++; found++; } else missing++;
       }
-      say(`Matched ${found}${missing?`; ${missing} not found — use Find to search by hand, or Skip`:''}. Auto-matches (≈) are the top search result, so give them a quick look.`);
+      say(`Matched ${found}${missing?`; ${missing} not found — use Find to search by hand, or Skip`:''}${lens?`. Filled in ${lens} blank length${lens===1?'':'s'} from Spotify`:''}. Auto-matches (≈) are the top search result, so give them a quick look.`);
+    }catch(e){ say(`Stopped: ${esc(e.message)}`); }
+    st.busy=false; save(); draw();
+  }
+  async function fillLens(){
+    const todo=[...new Map(spEntries(sl).map(e=>[e.s.id,e.s])).values()].filter(s=>s.spotify&&s.spotify.uri&&(s.length==null||s.length===''));
+    st.busy=true; draw(); let n=0;
+    try{
+      for(let i=0;i<todo.length;i++){
+        const s=todo[i]; say(`Getting lengths from Spotify… ${i+1} of ${todo.length}`);
+        if(!s.spotify.ms && s.spotify.id){ const t=await spApi(`/tracks/${s.spotify.id}`); s.spotify.ms=t?.duration_ms||null; }
+        if(spFillLen(s)) n++;
+      }
+      say(`Filled in ${n} length${n===1?'':'s'} from Spotify (the recorded length; edit any that run differently live).`);
     }catch(e){ say(`Stopped: ${esc(e.message)}`); }
     st.busy=false; save(); draw();
   }
