@@ -311,14 +311,14 @@ table.data tbody tr:hover{background:#fbf7ec}
 <div id="banner"></div>
 <main id="main"></main>
 <div id="modal"></div>
-<datalist id="songTitles"></datalist>
+<datalist id="songTitles"></datalist><datalist id="artistList"></datalist>
 <div id="printOut"></div>
 
 <script>
 const STORE_KEY = 'setlist-builder-v1';
 const OLD_KEY = 'someguys-setlists-v1';
 const FILE_FORMAT = 'setlist-builder-band';
-const COLS = {num:'#', title:'Song', key:'Key', vox:'Lead vox', length:'Length', tempo:'BPM', notes:'Notes', tags:'Tags'};
+const COLS = {num:'#', title:'Song', artist:'Artist', key:'Key', vox:'Lead vox', length:'Length', tempo:'BPM', notes:'Notes', tags:'Tags'};
 const PAPER_IN = {letter:{w:8.5, h:11, css:'letter'}, a4:{w:210/25.4, h:297/25.4, css:'A4'}};
 /* Page geometry in CSS px for the chosen paper and margin (inches). */
 function paperDims(st){
@@ -344,7 +344,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
-function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[], lyrics:'', noBook:false, bookChords:true}, o); }
+function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', artist:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[], lyrics:'', noBook:false, bookChords:true}, o); }
 function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, tagColors:{}, showSetVox:true, book:{who:'', chords:true, fontSize:22, cover:true}}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
@@ -406,6 +406,9 @@ $('#openBand').onchange=e=>{ const f=e.target.files[0]; e.target.value=''; if(f)
 $('#saveBand').onclick=saveBandFile;
 function banner(msg){ $('#banner').innerHTML = msg ? `<div class="banner">${esc(msg)}</div>` : ''; }
 const songById = id => S.songs.find(s=>s.id===id);
+/* Artist is a catalog fact, never overridden per gig. A mashup shows its parts' artists. */
+function songArtist(s){ if(!s) return ''; if(s.type!=='mashup') return s.artist||''; return [...new Set((s.parts||[]).map(p=>typeof p==='string'?songById(p)?.artist:'').filter(Boolean))].join(' / '); }
+function itemArtist(it){ return songArtist(songById(it.songId)); }
 function itemLen(it){ const s=songById(it.songId); return s ? s.length : it.length; }
 const cur = () => S.setlists.find(s=>s.id===curId);
 function touch(){ const sl=cur(); if(sl){ sl.updated=Date.now(); if(!rearranging) delete arrHist[sl.id]; } save(); }
@@ -503,11 +506,12 @@ ACT.delSl = d => { const o=S.setlists.find(s=>s.id===d.id); if(!confirm(`Delete 
 const cat={q:'', tag:'', vox:'', missing:false, nolyrics:false, type:'', sort:'title', dir:1};
 function matches(s, f){
   const q=(f.q||'').trim().toLowerCase();
-  if(q && !(s.title.toLowerCase().includes(q) || s.tags.some(t=>t.includes(q)) || (s.notes||'').toLowerCase().includes(q) || voxStr(s.vox).toLowerCase().includes(q))) return false;
+  if(q && !(s.title.toLowerCase().includes(q) || songArtist(s).toLowerCase().includes(q) || s.tags.some(t=>t.includes(q)) || (s.notes||'').toLowerCase().includes(q) || voxStr(s.vox).toLowerCase().includes(q))) return false;
   if(f.tag && !s.tags.includes(f.tag)) return false;
   if(f.vox && !s.vox.includes(f.vox)) return false;
   if(f.missing && s.key && s.vox.length) return false;
   if(f.nolyrics && (s.lyrics||'').trim()) return false;
+  if(f.noartist && (s.type==='mashup' || (s.artist||'').trim())) return false;
   if(f.type && s.type!==f.type) return false;
   return true;
 }
@@ -518,14 +522,15 @@ function renderCatalog(){
     <div class="toolbar"><h1 style="margin:0">Song catalog</h1><span class="muted" id="catCount"></span><span class="grow"></span>
       <button class="btn" data-act="newMashup">+ Mashup</button><button class="btn primary" data-act="newSong">+ Song</button></div>
     <div class="toolbar">
-      <input type="search" id="cq" placeholder="Search title, tag, singer, notes…" style="width:280px" value="${esc(cat.q)}">
+      <input type="search" id="cq" placeholder="Search title, artist, tag, singer, notes…" style="width:280px" value="${esc(cat.q)}">
       <select id="ctag">${filterOpts()}</select><select id="cvox">${voxOpts()}</select>
       <select id="ctype"><option value="">Songs &amp; mashups</option><option value="song">Songs only</option><option value="mashup">Mashups only</option></select>
       <label class="opt"><input type="checkbox" id="cmiss" ${cat.missing?'checked':''}> Missing key or vox</label>
+      <label class="opt"><input type="checkbox" id="cnoart" ${cat.noartist?'checked':''}> No artist</label>
       <label class="opt"><input type="checkbox" id="cnoly" ${cat.nolyrics?'checked':''}> No lyrics yet</label>
     </div>
     <div class="tablewrap"><table class="data"><thead><tr>
-      ${[['title','Title'],['key','Key'],['vox','Lead vox'],['length','Length'],['tempo','BPM'],['tags','Tags'],['notes','Notes']].map(([k,l])=>`<th data-act="sort" data-k="${k}">${l}${cat.sort===k?(cat.dir>0?' ▲':' ▼'):''}</th>`).join('')}
+      ${[['title','Title'],['artist','Artist'],['key','Key'],['vox','Lead vox'],['length','Length'],['tempo','BPM'],['tags','Tags'],['notes','Notes']].map(([k,l])=>`<th data-act="sort" data-k="${k}">${l}${cat.sort===k?(cat.dir>0?' ▲':' ▼'):''}</th>`).join('')}
     </tr></thead><tbody id="ctbody"></tbody></table></div>`;
   $('#ctag').value=cat.tag; $('#cvox').value=cat.vox; $('#ctype').value=cat.type;
   $('#cq').oninput=e=>{cat.q=e.target.value; renderCatTable();};
@@ -534,18 +539,19 @@ function renderCatalog(){
   $('#ctype').onchange=e=>{cat.type=e.target.value; renderCatTable();};
   $('#cmiss').onchange=e=>{cat.missing=e.target.checked; renderCatTable();};
   $('#cnoly').onchange=e=>{cat.nolyrics=e.target.checked; renderCatTable();};
+  $('#cnoart').onchange=e=>{cat.noartist=e.target.checked; renderCatTable();};
   renderCatTable();
 }
 function renderCatTable(){
   const k=cat.sort, d=cat.dir;
-  const val = s => k==='title'?sortTitle(s.title) : k==='vox'?voxStr(s.vox).toLowerCase() : k==='tags'?s.tags.join(','):(k==='length'||k==='tempo')?s[k]:String(s[k]||'').toLowerCase();
+  const val = s => k==='title'?sortTitle(s.title) : k==='vox'?voxStr(s.vox).toLowerCase() : k==='artist'?songArtist(s).toLowerCase() : k==='tags'?s.tags.join(','):(k==='length'||k==='tempo')?s[k]:String(s[k]||'').toLowerCase();
   const list=S.songs.filter(s=>matches(s,cat)).sort((a,b)=>{ const x=val(a), y=val(b); const ex=x==null||x==='', ey=y==null||y===''; if(ex!==ey) return ex?1:-1; return (typeof x==='number'? x-y : String(x).localeCompare(String(y)))*d || sortTitle(a.title).localeCompare(sortTitle(b.title)); });
   $('#catCount').textContent = `${list.length} of ${S.songs.length}`;
   const bl='<span class="blank">—</span>';
   $('#ctbody').innerHTML = list.map(s=>`<tr data-act="editSong" data-id="${s.id}">
     <td><b>${esc(s.title)}</b>${s.lyrics?(hasChords(s.lyrics)?'<span class="badge chd" title="Lyrics with chords saved">CHORDS</span>':'<span class="badge lyr" title="Lyrics saved">LYRICS</span>'):''}${s.type==='mashup'?`<span class="badge mash">MASHUP</span><div class="msub">${esc(mashupParts(s))}</div>`:''}</td>
-    <td>${esc(s.key)||bl}</td><td>${esc(voxStr(s.vox))||bl}</td><td>${fmt(s.length)||bl}</td><td>${s.tempo??bl}</td>
-    <td>${s.tags.map(t=>tagChip(t)).join('')}</td><td class="muted">${esc(s.notes)}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">No songs match.</td></tr>`;
+    <td>${esc(songArtist(s))||bl}</td><td>${esc(s.key)||bl}</td><td>${esc(voxStr(s.vox))||bl}</td><td>${fmt(s.length)||bl}</td><td>${s.tempo??bl}</td>
+    <td>${s.tags.map(t=>tagChip(t)).join('')}</td><td class="muted">${esc(s.notes)}</td></tr>`).join('') || `<tr><td colspan="8" class="empty">No songs match.</td></tr>`;
 }
 ACT.sort = d => { if(cat.sort===d.k) cat.dir*=-1; else {cat.sort=d.k; cat.dir=1;} renderCatalog(); };
 ACT.newSong = () => editSong(null, false);
@@ -573,6 +579,7 @@ function editSong(id, asMashup){
     <div id="mBox" style="display:${isM?'block':'none'}"><label>Songs in this mashup <small>(at least 2, in order; songs not in the catalog are fine)</small><div class="parts" id="mParts"></div>
       <div class="row"><input id="mPick" list="songTitles" placeholder="Type a song title…"><button class="btn" id="mAdd" type="button">Add</button></div></label></div>
     <label>Title<input id="fTitle" value="${esc(s.title)}"></label>
+    <label id="fArtistL" style="display:${isM?'none':''}">Artist <small>(the original artist for covers)</small><input id="fArtist" list="artistList" value="${esc(s.artist||'')}"></label>
     <label>Lead vox <small>(click to toggle; numbers show order)</small>${voxPicker('fVox', s.vox)}</label>
     <div class="g3">
       <label>Key<input id="fKey" value="${esc(s.key)}"></label>
@@ -589,6 +596,7 @@ function editSong(id, asMashup){
     ${id?`<div class="cmpnote">Used in ${used} setlist${used===1?'':'s'}. Length applies everywhere. Each setlist keeps its own copy of key, vox, tempo and notes, so changing those here won't alter past setlists.</div>`:''}
     <div class="mfoot">${id?'<button class="btn danger" id="fDel">Delete</button>':''}<span class="grow"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="fSave">Save</button></div>`);
   wireChips('#fTags'); wireVox('fVox'); wireLyricsBox('#fLyrics', '#fLyPrev', s);
+  $('#artistList').innerHTML=[...new Set(S.songs.map(x=>x.artist).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}">`).join('');
   const head = () => { $('#fHead').textContent = `${id?'Edit':'New'} ${isM?'mashup':'song'}`; $('#fTitle').placeholder = isM?'Defaults to Song A / Song B':''; };
   const renderParts = () => {
     $('#mParts').innerHTML = parts.map((p,i)=>`<div><span>${esc(partTitle(p)||'(deleted)')}${typeof p==='string'?'':' <span class="muted">not in catalog</span>'}</span><span><button class="ib" data-mvpart="${i}" title="Move up" ${i?'':'disabled'}>↑</button><button class="ib" data-delpart="${i}" title="Remove">×</button></span></div>`).join('') || '<span class="muted">No songs added yet.</span>';
@@ -598,13 +606,13 @@ function editSong(id, asMashup){
   const syncTitle = () => { const t=$('#fTitle'), a=autoTitle(); if(!t.value.trim() || t.value===lastAuto) t.value=a; lastAuto=a; };
   const add = () => { const raw=$('#mPick').value.trim(); if(!raw) return; const m=S.songs.find(x=>x.type==='song' && x.id!==s.id && x.title.toLowerCase()===raw.toLowerCase()); parts.push(m?m.id:{title:raw}); $('#mPick').value=''; syncTitle(); renderParts(); $('#mPick').focus(); };
   $('#mAdd').onclick=add; $('#mPick').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } };
-  $('#fIsM').onchange=e=>{ isM=e.target.checked; $('#mBox').style.display=isM?'block':'none'; head(); if(isM) $('#mPick').focus(); };
+  $('#fIsM').onchange=e=>{ isM=e.target.checked; $('#mBox').style.display=isM?'block':'none'; $('#fArtistL').style.display=isM?'none':''; head(); if(isM) $('#mPick').focus(); };
   head(); renderParts();
   $('#fSave').onclick = () => {
     const title=$('#fTitle').value.trim() || (isM?autoTitle():'');
     if(!title){ $('#fTitle').focus(); $('#fTitle').style.borderColor='var(--danger)'; return; }
     if(isM && parts.length<2){ alert('A mashup needs at least 2 songs.'); return; }
-    Object.assign(s, {type:isM?'mashup':'song', title, key:$('#fKey').value.trim(), vox:readVox('fVox'), length:parseLen($('#fLen').value), tempo:numOrNull($('#fTempo').value), tags:parseTags($('#fTags').value), notes:$('#fNotes').value.trim(), parts:isM?parts:[], lyrics:$('#fLyrics').value.replace(/\s+$/,''), noBook:$('#fNoBook').checked, bookChords:$('#fBookCh').checked});
+    Object.assign(s, {type:isM?'mashup':'song', title, artist:isM?'':$('#fArtist').value.trim(), key:$('#fKey').value.trim(), vox:readVox('fVox'), length:parseLen($('#fLen').value), tempo:numOrNull($('#fTempo').value), tags:parseTags($('#fTags').value), notes:$('#fNotes').value.trim(), parts:isM?parts:[], lyrics:$('#fLyrics').value.replace(/\s+$/,''), noBook:$('#fNoBook').checked, bookChords:$('#fBookCh').checked});
     if(!id) S.songs.push(s);
     save(); closeModal(); render();
   };
@@ -993,6 +1001,7 @@ function cellHtml(c, it, n){
   switch(c){
     case 'num': return n;
     case 'title': { const ps=S.settings.showParts?itemParts(it):''; return esc(itemTitle(it)) + (it.segue?' <span class="segarrow">→</span>':'') + (ps?`<div class="mparts">${esc(ps)}</div>`:''); }
+    case 'artist': return esc(itemArtist(it));
     case 'key': return esc(it.key);
     case 'vox': return esc(voxStr(it.vox));
     case 'length': return fmt(itemLen(it));
@@ -1360,7 +1369,7 @@ function renderSettings(){
     </div>
     <div class="card" style="padding:18px">
       <h2>Import songs from CSV</h2>
-      <p>Adds songs whose titles aren't already in the catalog. Recognized columns: <code>title</code>, <code>lead vocals</code> (or <code>vox</code>), <code>key</code>, <code>length</code>, <code>tempo</code>/<code>bpm</code>, <code>notes</code>, <code>tags</code> (separated by commas or semicolons).</p>
+      <p>Adds songs whose titles aren't already in the catalog. Recognized columns: <code>title</code>, <code>artist</code>, <code>lead vocals</code> (or <code>vox</code>), <code>key</code>, <code>length</code>, <code>tempo</code>/<code>bpm</code>, <code>notes</code>, <code>tags</code> (separated by commas or semicolons). For songs already in the catalog, a blank artist is filled in and nothing else changes.</p>
       <label class="btn" style="flex-direction:row;color:var(--text);font-size:14px;display:inline-flex">Choose CSV…<input type="file" id="importCsv" accept=".csv,text/csv" hidden></label>
       <p id="csvMsg" class="muted"></p>
     </div>
@@ -1406,14 +1415,19 @@ function importCsv(text){
   const rows=parseCsv(text); if(rows.length<2) return 'No rows found.';
   const h=rows[0].map(x=>x.trim().toLowerCase());
   const col = (...names) => h.findIndex(x=>names.includes(x));
-  const ti=col('title','song','name'), vi=col('lead vocals','lead vox','vox','vocals','singer'), ki=col('key'), li=col('length','duration','time'), bi=col('tempo','bpm'), ni=col('notes','note'), gi=col('tags','tag');
+  const ai=col('artist','original artist','performer','band'), ti=col('title','song','name'), vi=col('lead vocals','lead vox','vox','vocals','singer'), ki=col('key'), li=col('length','duration','time'), bi=col('tempo','bpm'), ni=col('notes','note'), gi=col('tags','tag');
   if(ti<0) return 'Could not find a "title" column.';
-  const have=new Set(S.songs.map(s=>s.title.trim().toLowerCase())); let added=0, skipped=0;
-  rows.slice(1).forEach(r=>{ const t=(r[ti]||'').trim(); if(!t) return; if(have.has(t.toLowerCase())){ skipped++; return; }
-    S.songs.push(newSong({title:t, vox:vi>=0?parseVox(r[vi]):[], key:ki>=0?(r[ki]||'').trim():'', length:li>=0?parseLen(r[li]):null, tempo:bi>=0?numOrNull(r[bi]):null, notes:ni>=0?(r[ni]||'').trim():'', tags:gi>=0?parseTags((r[gi]||'').replace(/;/g,',')):[]}));
+  const have=new Set(S.songs.map(s=>s.title.trim().toLowerCase())); let added=0, skipped=0, filled=0;
+  rows.slice(1).forEach(r=>{ const t=(r[ti]||'').trim(); if(!t) return;
+    if(have.has(t.toLowerCase())){
+      // already in the catalog: only fill in a blank artist, never overwrite anything
+      const ex=S.songs.find(s=>s.title.trim().toLowerCase()===t.toLowerCase()), a=ai>=0?(r[ai]||'').trim():'';
+      if(ex && ex.type!=='mashup' && a && !(ex.artist||'').trim()){ ex.artist=a; filled++; } else skipped++;
+      return; }
+    S.songs.push(newSong({title:t, artist:ai>=0?(r[ai]||'').trim():'', vox:vi>=0?parseVox(r[vi]):[], key:ki>=0?(r[ki]||'').trim():'', length:li>=0?parseLen(r[li]):null, tempo:bi>=0?numOrNull(r[bi]):null, notes:ni>=0?(r[ni]||'').trim():'', tags:gi>=0?parseTags((r[gi]||'').replace(/;/g,',')):[]}));
     have.add(t.toLowerCase()); added++; });
   S.songs.flatMap(s=>s.vox).forEach(v=>{ if(v!=='All' && !S.settings.members.includes(v)) S.settings.members.push(v); });
-  save(); return `Added ${added} song${added===1?'':'s'}, skipped ${skipped} already in the catalog.`;
+  save(); return `Added ${added} song${added===1?'':'s'}${filled?`, filled in the artist on ${filled}`:''}, skipped ${skipped} already in the catalog.`;
 }
 
 /* ---------- boot ---------- */
