@@ -8,6 +8,8 @@ Import the lyrics files already in Google Drive (exported as .txt or .docx) in o
 
 ## Idea 1: Export a set list to a Spotify playlist
 
+**Status: built** (Spotify button in a setlist; setup under Band settings → Spotify).
+
 The user signs into Spotify from the app, then taps one button to turn the current set list into a playlist with every song in set order. Spotify's Web API supports this: it has endpoints to search the catalog, create a playlist, and add tracks to it ([migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)).
 
 **Prerequisite: add an Artist field to each song.** Catalog songs only have a title today, and a title alone won't find the right track on Spotify. Each song needs an artist (the original artist for covers) before matching can work. Existing songs will need the artist filled in.

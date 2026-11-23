@@ -1,6 +1,6 @@
 # Setlist Builder
 
-A single-file, offline setlist builder for any band or event. Open `Setlist Builder.html` in Chrome; no install or server needed.
+A single-file setlist builder for any band or event. Open `Setlist Builder.html` in Chrome; no install or server needed. It's also hosted at https://castello96.github.io/setlist-builder/, which is the copy to use for Spotify.
 
 ## Features
 
@@ -12,6 +12,17 @@ A single-file, offline setlist builder for any band or event. Open `Setlist Buil
 - **Print / PDF**: band logo, selectable and reorderable columns, multi-page flow or shrink-to-fit-one-page, Letter or A4.
 - **Lyrics**: store plain lyrics on each song, or lyrics with chords written inline like `[G]Last Christmas I [Em]gave you my heart`. Pasting chords-above-lyrics converts automatically.
 - **Lyrics book**: one iPad-sized (3:4) PDF per setlist, with one song per page in setlist order. Each page shows the set and song number ("Song 4 of 13"), the singers and key, and segue cues and "next" cues. Very long songs continue onto a second page rather than being cut off. A linked setlist cover page is optional. Chords can be shown or hidden for the whole book or song by song, and they're transposed to the gig's key. Save it to the iPad (Books or Files) and it works offline.
+- **Spotify playlists**: turn a setlist into a playlist in set order (mashups add their catalog parts). Each song is matched to a Spotify track once and remembered, with a picker to choose a different recording or skip songs that aren't on Spotify. Re-export updates the same playlist.
+
+## Spotify setup (one time)
+
+Spotify sign-in can't return to a file on your computer, so use the hosted copy (or serve the folder at `http://127.0.0.1:<port>`).
+
+1. Someone with Spotify Premium (required by Spotify for small personal apps) creates an app at developer.spotify.com/dashboard, with **Web API** ticked.
+2. Set its Redirect URI to the one shown under **Band settings → Spotify** (for the hosted copy: `https://castello96.github.io/setlist-builder/`).
+3. Paste the app's Client ID into **Band settings → Spotify**, and save the band file.
+4. Add each band member who will make playlists under the app's **User Management** (Spotify allows 5).
+5. Click **Connect Spotify**. The sign-in stays in that browser only; it never goes into the band file.
 
 ## Band files
 
