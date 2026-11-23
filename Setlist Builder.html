@@ -239,12 +239,59 @@ table.data tbody tr:hover{background:#fbf7ec}
 .pdoc tr.ptot td{text-align:right;font-size:.75em;color:#555;border-bottom:0;padding-top:.2em}
 .pdoc .pfoot{margin-top:.8em;font-size:.8em;color:#444;text-align:right}
 
+/* Lyrics (editor preview + book) */
+.lyedit{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;min-height:220px;line-height:1.45;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+.lyprev{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;max-height:240px;overflow:auto;font-size:14px;margin:-4px 0 10px;background:#fcfbf8}
+.lyprev:empty{display:none}
+.lytext .lyl{white-space:pre-wrap;line-height:1.35;min-height:1.35em}
+.lytext .lyl.chl{line-height:1.15;margin-top:.15em}
+.lytext .seg{display:inline-block;vertical-align:baseline;white-space:pre}
+.lytext .seg b{display:block;font-size:.78em;font-weight:800;color:#1d4ea8;line-height:1.15;min-height:1.15em;padding-right:.35em}
+.lytext .lyblank{height:.75em}
+.lytext .lysec{font-weight:800;text-transform:uppercase;font-size:.7em;letter-spacing:.08em;color:#777;margin:.55em 0 .1em}
+.badge.lyr{background:#e6f2ea;color:var(--ok)}
+.badge.chd{background:#dce7ff;color:#1d4ea8}
+.bookwrap{display:grid;grid-template-columns:280px 1fr;gap:20px}
+.bookwrap aside{display:flex;flex-direction:column;gap:8px}
+.chlist{margin:-4px 0 4px 22px;display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto}
+.chlist small{color:var(--muted)}
+.chlist label.opt{font-size:12px;margin:0 !important}
+.bookview{background:#d9d5cc;border-radius:10px;padding:20px;overflow:auto;max-height:calc(100vh - 160px);display:flex;flex-direction:column;align-items:center;gap:18px}
+.bookpage{background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18);padding:0.4in}
+.lpage{display:flex;flex-direction:column;overflow:hidden;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+.lpage a{color:inherit;text-decoration:none}
+.lpage .lphead{border-bottom:2px solid #111;padding-bottom:.35em;margin-bottom:.6em}
+.lpage .lpmeta{font-size:.6em;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#777;display:flex;justify-content:space-between}
+.lpage h1{font-size:1.45em;margin:.1em 0 .05em;line-height:1.15}
+.lpage .lpsub{font-size:.72em;color:#444}
+.lpage .lpsub b{color:#111}
+.lpage .lpparts{font-size:.65em;color:#666;margin-top:.1em}
+.lpage .lpbody{flex:1;min-height:0;overflow:hidden}
+.lpage .lptext{font-size:1em}
+.lpage .lptext.cols{column-count:2;column-gap:1.6em;column-rule:1px solid #ddd}
+.lpage .lptext.cols .lyl,.lpage .lptext.cols .lysec{break-inside:avoid}
+.lpage h1 .lpcont{font-size:.5em;color:#888;font-weight:600}
+.lpage .lpnone{color:#999;font-style:italic;font-size:.8em;margin-top:1em}
+.lpage .lpfoot{border-top:1px solid #bbb;padding-top:.35em;margin-top:.4em;font-size:.68em;color:#444;display:flex;justify-content:space-between;gap:1em}
+.lpage .lpfoot .seg-next{color:#1d4ea8;font-weight:800}
+.lpage .cvhead{text-align:center;margin-bottom:.6em}
+.lpage .cvhead img{height:3.6em;max-width:60%;object-fit:contain}
+.lpage .cvhead .cvname{font-size:1.2em;font-weight:800}
+.lpage .cvhead .cvsub{font-size:.7em;color:#555}
+.lpage .cvlist{font-size:.78em;column-count:2;column-gap:1.4em}
+.lpage .cvset{font-weight:800;font-size:.75em;letter-spacing:.1em;text-transform:uppercase;color:#777;margin:.6em 0 .15em;break-after:avoid}
+.lpage .cvrow{display:flex;gap:.5em;padding:.12em 0;border-bottom:1px solid #eee;break-inside:avoid}
+.lpage .cvrow .cvn{color:#888;min-width:1.6em;text-align:right}
+.lpage .cvrow.out{color:#aaa}
+.lpage .cvrow a{font-weight:600}
 #printOut{display:none}
 @media print{
   body{background:#fff}
   body>*:not(#printOut){display:none !important}
   #printOut{display:block}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #printOut .lpage{break-after:page;page-break-after:always}
+  #printOut .lpage:last-child{break-after:auto;page-break-after:auto}
 }
 </style>
 </head>
@@ -297,8 +344,8 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
-function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[]}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, tagColors:{}, showSetVox:true}; }
+function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[], lyrics:'', noBook:false, bookChords:true}, o); }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, tagColors:{}, showSetVox:true, book:{who:'', chords:true, fontSize:22, cover:true}}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -453,13 +500,14 @@ ACT.dupSl = d => { const o=S.setlists.find(s=>s.id===d.id); const c=clone(o); c.
 ACT.delSl = d => { const o=S.setlists.find(s=>s.id===d.id); if(!confirm(`Delete setlist "${o.name}"? This can't be undone.`)) return; S.setlists=S.setlists.filter(s=>s.id!==d.id); save(); render(); };
 
 /* ---------- catalog view ---------- */
-const cat={q:'', tag:'', vox:'', missing:false, type:'', sort:'title', dir:1};
+const cat={q:'', tag:'', vox:'', missing:false, nolyrics:false, type:'', sort:'title', dir:1};
 function matches(s, f){
   const q=(f.q||'').trim().toLowerCase();
   if(q && !(s.title.toLowerCase().includes(q) || s.tags.some(t=>t.includes(q)) || (s.notes||'').toLowerCase().includes(q) || voxStr(s.vox).toLowerCase().includes(q))) return false;
   if(f.tag && !s.tags.includes(f.tag)) return false;
   if(f.vox && !s.vox.includes(f.vox)) return false;
   if(f.missing && s.key && s.vox.length) return false;
+  if(f.nolyrics && (s.lyrics||'').trim()) return false;
   if(f.type && s.type!==f.type) return false;
   return true;
 }
@@ -474,6 +522,7 @@ function renderCatalog(){
       <select id="ctag">${filterOpts()}</select><select id="cvox">${voxOpts()}</select>
       <select id="ctype"><option value="">Songs &amp; mashups</option><option value="song">Songs only</option><option value="mashup">Mashups only</option></select>
       <label class="opt"><input type="checkbox" id="cmiss" ${cat.missing?'checked':''}> Missing key or vox</label>
+      <label class="opt"><input type="checkbox" id="cnoly" ${cat.nolyrics?'checked':''}> No lyrics yet</label>
     </div>
     <div class="tablewrap"><table class="data"><thead><tr>
       ${[['title','Title'],['key','Key'],['vox','Lead vox'],['length','Length'],['tempo','BPM'],['tags','Tags'],['notes','Notes']].map(([k,l])=>`<th data-act="sort" data-k="${k}">${l}${cat.sort===k?(cat.dir>0?' ▲':' ▼'):''}</th>`).join('')}
@@ -484,6 +533,7 @@ function renderCatalog(){
   $('#cvox').onchange=e=>{cat.vox=e.target.value; renderCatTable();};
   $('#ctype').onchange=e=>{cat.type=e.target.value; renderCatTable();};
   $('#cmiss').onchange=e=>{cat.missing=e.target.checked; renderCatTable();};
+  $('#cnoly').onchange=e=>{cat.nolyrics=e.target.checked; renderCatTable();};
   renderCatTable();
 }
 function renderCatTable(){
@@ -493,7 +543,7 @@ function renderCatTable(){
   $('#catCount').textContent = `${list.length} of ${S.songs.length}`;
   const bl='<span class="blank">—</span>';
   $('#ctbody').innerHTML = list.map(s=>`<tr data-act="editSong" data-id="${s.id}">
-    <td><b>${esc(s.title)}</b>${s.type==='mashup'?`<span class="badge mash">MASHUP</span><div class="msub">${esc(mashupParts(s))}</div>`:''}</td>
+    <td><b>${esc(s.title)}</b>${s.lyrics?(hasChords(s.lyrics)?'<span class="badge chd" title="Lyrics with chords saved">CHORDS</span>':'<span class="badge lyr" title="Lyrics saved">LYRICS</span>'):''}${s.type==='mashup'?`<span class="badge mash">MASHUP</span><div class="msub">${esc(mashupParts(s))}</div>`:''}</td>
     <td>${esc(s.key)||bl}</td><td>${esc(voxStr(s.vox))||bl}</td><td>${fmt(s.length)||bl}</td><td>${s.tempo??bl}</td>
     <td>${s.tags.map(t=>tagChip(t)).join('')}</td><td class="muted">${esc(s.notes)}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">No songs match.</td></tr>`;
 }
@@ -532,9 +582,13 @@ function editSong(id, asMashup){
     <label>Tags <small>(comma separated, e.g. holiday, halloween, opener)</small><input id="fTags" value="${esc(s.tags.join(', '))}"></label>
     ${tagChips()}
     <label>Notes<textarea id="fNotes">${esc(s.notes)}</textarea></label>
+    <label>Lyrics <small>(plain words, or with chords in brackets before the syllable, e.g. [G]Last Christmas I [Em]gave you. Pasting chords-above-lyrics converts automatically.)</small><textarea id="fLyrics" class="lyedit" spellcheck="false">${esc(s.lyrics||'')}</textarea></label>
+    <div class="lyprev lytext" id="fLyPrev"></div>
+    <label class="opt"><input type="checkbox" id="fBookCh" ${s.bookChords!==false?'checked':''}> Show chords in lyrics books (when the lyrics have chords)</label>
+    <label class="opt" style="margin-bottom:10px !important"><input type="checkbox" id="fNoBook" ${s.noBook?'checked':''}> Leave out of lyrics books</label>
     ${id?`<div class="cmpnote">Used in ${used} setlist${used===1?'':'s'}. Length applies everywhere. Each setlist keeps its own copy of key, vox, tempo and notes, so changing those here won't alter past setlists.</div>`:''}
     <div class="mfoot">${id?'<button class="btn danger" id="fDel">Delete</button>':''}<span class="grow"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="fSave">Save</button></div>`);
-  wireChips('#fTags'); wireVox('fVox');
+  wireChips('#fTags'); wireVox('fVox'); wireLyricsBox('#fLyrics', '#fLyPrev', s);
   const head = () => { $('#fHead').textContent = `${id?'Edit':'New'} ${isM?'mashup':'song'}`; $('#fTitle').placeholder = isM?'Defaults to Song A / Song B':''; };
   const renderParts = () => {
     $('#mParts').innerHTML = parts.map((p,i)=>`<div><span>${esc(partTitle(p)||'(deleted)')}${typeof p==='string'?'':' <span class="muted">not in catalog</span>'}</span><span><button class="ib" data-mvpart="${i}" title="Move up" ${i?'':'disabled'}>↑</button><button class="ib" data-delpart="${i}" title="Remove">×</button></span></div>`).join('') || '<span class="muted">No songs added yet.</span>';
@@ -550,7 +604,7 @@ function editSong(id, asMashup){
     const title=$('#fTitle').value.trim() || (isM?autoTitle():'');
     if(!title){ $('#fTitle').focus(); $('#fTitle').style.borderColor='var(--danger)'; return; }
     if(isM && parts.length<2){ alert('A mashup needs at least 2 songs.'); return; }
-    Object.assign(s, {type:isM?'mashup':'song', title, key:$('#fKey').value.trim(), vox:readVox('fVox'), length:parseLen($('#fLen').value), tempo:numOrNull($('#fTempo').value), tags:parseTags($('#fTags').value), notes:$('#fNotes').value.trim(), parts:isM?parts:[]});
+    Object.assign(s, {type:isM?'mashup':'song', title, key:$('#fKey').value.trim(), vox:readVox('fVox'), length:parseLen($('#fLen').value), tempo:numOrNull($('#fTempo').value), tags:parseTags($('#fTags').value), notes:$('#fNotes').value.trim(), parts:isM?parts:[], lyrics:$('#fLyrics').value.replace(/\s+$/,''), noBook:$('#fNoBook').checked, bookChords:$('#fBookCh').checked});
     if(!id) S.songs.push(s);
     save(); closeModal(); render();
   };
@@ -595,6 +649,7 @@ function renderBuilder(){
       <label>Gap between songs <small>(sec)</small><input id="slBuffer" class="w-num" inputmode="numeric" value="${sl.buffer??''}"></label>
       <span class="grow"></span>
       <button class="btn" data-act="slNotes">Notes${sl.notes?' •':''}</button>
+      <button class="btn" data-act="lyricsBook" title="Build an iPad lyrics book PDF for this setlist">Lyrics book</button>
       <button class="btn primary" data-act="print">Print / PDF</button>
     </div>
     <div class="summary" id="slSummary"></div>
@@ -849,6 +904,7 @@ ACT.editLen = (d, e, el) => {
 };
 ACT.slNotes = () => { const sl=cur(); openModal(`<h2>Setlist notes</h2><label>Notes <small>(shown at the top of the printout if enabled)</small><textarea id="nT" style="min-height:140px">${esc(sl.notes)}</textarea></label><div class="mfoot"><span class="grow"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="nS">Save</button></div>`); $('#nS').onclick=()=>{ sl.notes=$('#nT').value.trim(); touch(); closeModal(); renderBuilder(); }; setTimeout(()=>$('#nT').focus(),0); };
 ACT.print = () => openPrint();
+ACT.lyricsBook = () => openBook();
 
 function wireBuilderDnD(){
   const bcat=$('#bcat'), list=$('#sitems');
@@ -1062,6 +1118,202 @@ function renderPreview(){
   };
   const img=$('img',doc); if(img && !img.complete) img.onload=go; go();
 }
+/* ---------- chords & lyrics ---------- */
+const CHORD_RE=/^[A-G][#b]?(?:maj|min|m|M|dim|aug|sus|add|°|ø|\+)?\d*(?:(?:sus|add|maj|b|#|\+|-)?\d+)*(?:\([^)]*\))?(?:\/[A-G][#b]?)?$/;
+const isChord = t => CHORD_RE.test(t);
+const isChordLine = l => { const t=l.trim().split(/\s+/).filter(Boolean); return t.length>0 && t.some(isChord) && t.every(x=>isChord(x) || /^(\||\/|-|N\.?C\.?|\(?x\d+\)?)$/i.test(x)); };
+const isSectionLine = l => { const t=l.trim(), br=t.match(/^\[([^\]]+)\]:?$/); return (br && !isChord(br[1].trim())) || SECTION_RE.test(t); };
+const hasChords = t => [...String(t||'').matchAll(/\[([^\]]+)\]/g)].some(m=>isChord(m[1].trim()));
+/* Convert "chords on their own line above the words" into inline [C]hords. */
+function chordsAboveToInline(text){
+  const L=String(text).replace(/\r\n?/g,'\n').split('\n'), out=[];
+  for(let i=0;i<L.length;i++){
+    const l=L[i];
+    if(!isChordLine(l)){ out.push(l); continue; }
+    const ch=[]; l.replace(/\S+/g,(m,pos)=>{ if(isChord(m)) ch.push([pos,m]); return m; });
+    const nx=L[i+1];
+    if(nx!==undefined && nx.trim() && !isChordLine(nx) && !isSectionLine(nx)){
+      let ly=nx; const maxP=Math.max(...ch.map(c=>c[0])); if(ly.length<maxP) ly=ly.padEnd(maxP,' ');
+      for(let k=ch.length-1;k>=0;k--){ const [pos,c]=ch[k]; ly=ly.slice(0,pos)+'['+c+']'+ly.slice(pos); }
+      out.push(ly.replace(/\s+$/,'')); i++;
+    } else out.push(ch.map(c=>'['+c[1]+']').join(' '));
+  }
+  return out.join('\n');
+}
+const NOTE_IDX={C:0,'B#':0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,Fb:4,F:5,'E#':5,'F#':6,Gb:6,G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11,Cb:11};
+const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'], FLATS=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+function parseKey(k){ const m=String(k||'').trim().match(/^([A-G][#b]?)(m|min|minor)?$/); if(!m || NOTE_IDX[m[1]]==null) return null; return {root:m[1], i:NOTE_IDX[m[1]], minor:!!m[2]}; }
+function keyUsesFlats(k){ const p=parseKey(k); if(!p) return false; if(p.root.includes('b')) return true; if(p.root.includes('#')) return false; return p.minor ? ['D','G','C','F'].includes(p.root) : p.root==='F'; }
+/* Chords are written in the catalog key; transpose them when this gig plays the song in another key. */
+function transposeFor(it){
+  const s=songById(it.songId); if(!s) return null;
+  const from=parseKey(s.key), to=parseKey(it.key); if(!from || !to) return null;
+  const n=(to.i-from.i+12)%12; return n ? {n, flats:keyUsesFlats(it.key), from:s.key, to:it.key} : null;
+}
+function transposeChord(c, tr){
+  if(!tr) return c;
+  const t = r => NOTE_IDX[r]==null ? r : (tr.flats?FLATS:SHARPS)[(NOTE_IDX[r]+tr.n)%12];
+  return c.replace(/^([A-G][#b]?)/, r=>t(r)).replace(/\/([A-G][#b]?)$/, (m,r)=>'/'+t(r));
+}
+const SECTION_RE=/^(intro|verse|pre-?chorus|chorus|bridge|outro|solo|tag|interlude|refrain|coda|instrumental|break|hook|post-?chorus|ending)\b[\w\s]{0,12}:?$/i;
+function lyricsHtml(text, chords=true, tr=null){
+  const lines=String(text||'').replace(/\r\n?/g,'\n').replace(/\s+$/,'').split('\n');
+  return lines.map(line=>{
+    const tl=line.trim();
+    if(!tl) return '<div class="lyblank"></div>';
+    const br=tl.match(/^\[([^\]]+)\]:?$/);
+    if(isSectionLine(tl)) return `<div class="lysec">${esc(br?br[1]:tl.replace(/:$/,''))}</div>`;
+    const segs=[]; let seg={c:null,t:''}, last=0;
+    for(const m of line.matchAll(/\[([^\]]+)\]/g)){
+      if(isChord(m[1].trim())){ seg.t+=line.slice(last,m.index); segs.push(seg); seg={c:m[1].trim(),t:''}; }
+      else seg.t+=line.slice(last,m.index+m[0].length);
+      last=m.index+m[0].length;
+    }
+    seg.t+=line.slice(last); segs.push(seg);
+    if(!segs.some(x=>x.c)) return `<div class="lyl">${esc(line)}</div>`;
+    if(!chords){ const words=segs.map(x=>x.t).join('').replace(/ {2,}/g,' ').trim(); return words?`<div class="lyl">${esc(words)}</div>`:''; }
+    return `<div class="lyl chl">${segs.filter(x=>x.c||x.t).map(x=>{
+      const head=x.t.match(/^\s*\S*/)[0], tail=x.t.slice(head.length);
+      return `<span class="seg"><b>${x.c?esc(transposeChord(x.c,tr)):''}</b>${esc(head)||'&nbsp;'}</span>${esc(tail)}`;
+    }).join('')}</div>`;
+  }).join('');
+}
+function wireLyricsBox(taSel, prevSel){
+  const ta=$(taSel), pv=$(prevSel);
+  const upd = () => { pv.innerHTML = ta.value.trim() ? lyricsHtml(ta.value, true, null) : ''; };
+  ta.addEventListener('paste', e=>{
+    const t=(e.clipboardData||window.clipboardData)?.getData('text'); if(!t) return;
+    if(!t.split(/\r?\n/).some(isChordLine)) return;
+    e.preventDefault(); ta.setRangeText(chordsAboveToInline(t), ta.selectionStart, ta.selectionEnd, 'end'); upd();
+  });
+  ta.addEventListener('input', upd); upd();
+}
+
+/* ---------- lyrics book ---------- */
+const BOOK = {w:7.5, h:10, m:0.4};   // inches; 3:4 like an iPad in portrait
+const bookPx = () => ({W:(BOOK.w-2*BOOK.m)*96, H:(BOOK.h-2*BOOK.m)*96-2});
+function bookEntries(sl){
+  const o=S.settings.book, out=[]; let n=0, set=0, sn=0;
+  sl.items.forEach((it,i)=>{
+    if(it.kind==='break'){ set++; sn=0; return; }
+    n++; sn++;
+    const s=songById(it.songId), v=it.vox||[];
+    const sings = !o.who || v.includes(o.who) || (v.includes('All') && lineup(sl).includes(o.who));
+    out.push({it, i, n, set, sn, s, inBook: sings && !(s&&s.noBook)});
+  });
+  out.forEach(e=>e.setSize=out.filter(x=>x.set===e.set).length);
+  return out;
+}
+function nextInfo(sl, i){
+  const it=sl.items[i]; let j=i+1, brk=false;
+  while(j<sl.items.length && sl.items[j].kind==='break'){ brk=true; j++; }
+  const nx=sl.items[j];
+  if(!nx) return '<span>End of show</span>';
+  if(it.segue && !brk) return `<span class="seg-next">→ segues into: ${esc(itemTitle(nx))}</span>`;
+  return `<span>${brk?'Set break, then: ':'Next: '}<b>${esc(itemTitle(nx))}</b></span>`;
+}
+function buildBook(sl){
+  const o=S.settings.book, {W,H}=bookPx(), E=bookEntries(sl), sets=Math.max(...E.map(e=>e.set),0)+1;
+  const sub=[fmtDate(sl.date), sl.venue].filter(Boolean).join(' · ');
+  const page = (id, inner) => `<div class="bookpage"><section class="lpage" id="${id}" style="width:${W}px;height:${H}px;font-size:${o.fontSize}px">${inner}</section></div>`;
+  let html='';
+  if(o.cover){
+    let rows='';
+    for(let k=0;k<sets;k++){
+      const es=E.filter(e=>e.set===k); if(!es.length) continue;
+      rows+=`<div class="cvset">Set ${k+1}</div>`+es.map(e=>`<div class="cvrow ${e.inBook?'':'out'}"><span class="cvn">${e.n}</span>${e.inBook?`<a href="#ly-${e.n}">${esc(itemTitle(e.it))}</a>`:`<span>${esc(itemTitle(e.it))}</span>`}${e.it.segue?' →':''}</div>`).join('');
+    }
+    html+=page('ly-cover', `<div class="lpbody"><div class="cvhead">${logoSrc()?`<img src="${logoSrc()}" alt="">`:''}<div class="cvname">${esc(sl.name)}</div><div class="cvsub">${esc(sub)}${sub?' · ':''}Lyrics${o.who?` for ${esc(o.who)}`:''}</div></div><div class="lptext cvlist">${rows}</div></div>`);
+  }
+  E.filter(e=>e.inBook).forEach(e=>{
+    const s=e.s, ch=o.chords && !(s&&s.bookChords===false), title=itemTitle(e.it), tr=ch?transposeFor(e.it):null, parts=itemParts(e.it), ly=(s&&s.lyrics)||'';
+    const vox=voxStr(e.it.vox), key=e.it.key;
+    html+=page(`ly-${e.n}`, `<div class="lphead"><div class="lpmeta"><span>Set ${e.set+1} · Song ${e.sn} of ${e.setSize}</span>${o.cover?'<a href="#ly-cover">☰ Setlist</a>':''}</div>
+      <h1>${esc(title)}</h1><div class="lpsub">${vox?`Vox: <b>${esc(vox)}</b>`:''}${vox&&key?' · ':''}${key?`Key: <b>${esc(key)}</b>`:''}${tr&&hasChords(ly)?` <span>(chords transposed from ${esc(tr.from)})</span>`:''}</div>
+      ${parts?`<div class="lpparts">${esc(parts)}</div>`:''}</div>
+      <div class="lpbody"><div class="lptext lytext">${ly.trim()?lyricsHtml(ly, ch, tr):'<div class="lpnone">No lyrics saved for this song.</div>'}</div></div>
+      <div class="lpfoot">${nextInfo(sl, e.i)}<span>${e.n} / ${E.length}</span></div>`);
+  });
+  return html;
+}
+/* Fit each song: try 2 columns, then shrink the text down to 60% (50% if it's only a few lines over). A song that still
+   doesn't fit continues on the next page at that size, rather than being cut off. */
+const BOOK_MIN=0.6;
+function fitBookPages(root){ $$('.lpage', root).forEach(pg=>fitBookPage(pg)); }
+function fitBookPage(pg, fixed){
+  const body=$('.lpbody',pg), txt=$('.lptext',pg); if(!body||!txt) return;
+  const over = () => txt.scrollHeight > body.clientHeight + 1 || txt.scrollWidth > body.clientWidth + 1;
+  const size = f => txt.style.fontSize=f.toFixed(2)+'em';
+  if(fixed==null){
+    size(1); txt.classList.remove('cols');
+    if(!over()) return;
+    if(txt.classList.contains('cvlist')){ let f=1; while(over() && f>0.45){ f-=0.04; size(f); } return; }
+    txt.classList.add('cols'); if(!over()) return;
+    let f=1; while(over() && f>BOOK_MIN+0.001){ f-=0.04; size(f); }
+    if(!over()) return;
+    // just a few lines over: squeeze a bit more rather than add a nearly empty page
+    while(over() && f>0.5+0.001){ f-=0.02; size(f); }
+    if(!over()) return;
+    fixed=BOOK_MIN;
+  }
+  size(fixed); txt.classList.add('cols');
+  if(!over()) return;
+  // continue on a new page: same header (marked "continued"), the overflow lines move there
+  const wrap=pg.parentElement, nw=wrap.cloneNode(true), np=$('.lpage',nw), ntx=$('.lptext',np);
+  np.id=pg.id+'-cont'; ntx.innerHTML='';
+  const h1=$('h1',np); if(!$('.lpcont',h1)) h1.innerHTML+=' <span class="lpcont">(continued)</span>';
+  $$('.lpsub,.lpparts',np).forEach(x=>x.remove());
+  while(over() && txt.children.length>1) ntx.prepend(txt.lastElementChild);
+  // don't leave a section heading or blank line stranded at the bottom
+  while(txt.children.length>1 && /lysec|lyblank/.test(txt.lastElementChild.className)) ntx.prepend(txt.lastElementChild);
+  while(ntx.firstElementChild && /lyblank/.test(ntx.firstElementChild.className)) ntx.firstElementChild.remove();
+  const ft=$('.lpfoot',pg); ft.firstElementChild.outerHTML='<span class="seg-next">Continued on next page →</span>';
+  wrap.after(nw);
+  fitBookPage(np, fixed);
+}
+function openBook(){
+  const sl=cur(), o=S.settings.book;
+  openModal(`<div class="toolbar"><h2 style="margin:0">Lyrics book</h2><span class="grow"></span><button class="btn" data-close>Close</button><button class="btn primary" id="bGo">Save PDF…</button></div>
+    <div class="bookwrap"><aside>
+      <label>Songs<select id="bWho"><option value="">Every song in the setlist</option>${S.settings.members.map(m=>`<option value="${esc(m)}">Only songs ${esc(m)} sings</option>`).join('')}</select></label>
+      <label class="opt"><input type="checkbox" id="bChords" ${o.chords?'checked':''}> Show chords (transposed to this gig's key)</label>
+      <div id="bChList" class="chlist"></div>
+      <label class="opt"><input type="checkbox" id="bCover" ${o.cover?'checked':''}> Setlist cover page with links</label>
+      <label>Text size <small id="bFsv">${o.fontSize}px</small><input type="range" id="bFs" min="14" max="34" value="${o.fontSize}"></label>
+      <p class="muted" id="bInfo"></p>
+      <p class="muted">Each song gets its own page sized for an iPad (3:4). Long songs switch to two columns and shrink; a song too long to stay readable on one page continues on the next.</p>
+      <p class="muted">Click <b>Save PDF…</b>, choose “Save as PDF”, leave Margins on “Default” and turn off “Headers and footers”. Then AirDrop or save the PDF to the iPad and open it in Books or Files. It works with no internet.</p>
+    </aside><div class="bookview" id="bView"></div></div>`, true);
+  $('#bWho').value=o.who||'';
+  const upd = () => { save(); renderBook(); };
+  $('#bWho').onchange=e=>{ o.who=e.target.value; upd(); };
+  $('#bChords').onchange=e=>{ o.chords=e.target.checked; upd(); };
+  $('#bCover').onchange=e=>{ o.cover=e.target.checked; upd(); };
+  $('#bFs').oninput=e=>{ o.fontSize=+e.target.value; $('#bFsv').textContent=o.fontSize+'px'; upd(); };
+  $('#bGo').onclick=printBook;
+  renderBook();
+}
+function renderBook(){
+  const v=$('#bView'); if(!v) return; const sl=cur();
+  v.innerHTML=buildBook(sl);
+  const go = () => fitBookPages(v);
+  $$('img',v).forEach(i=>{ if(!i.complete) i.onload=go; }); go();
+  const E=bookEntries(sl), inB=E.filter(e=>e.inBook), noLy=inB.filter(e=>!((e.s&&e.s.lyrics)||'').trim()).length;
+  $('#bInfo').textContent = `${inB.length} of ${E.length} songs in the book${noLy?` · ${noLy} without lyrics yet`:''}.`;
+  const wc=inB.filter(e=>e.s&&hasChords(e.s.lyrics||'')), cl=$('#bChList');
+  cl.style.display = S.settings.book.chords && wc.length ? '' : 'none';
+  cl.innerHTML = `<small>Chords for each song:</small>`+wc.map(e=>`<label class="opt"><input type="checkbox" data-bch="${e.s.id}" ${e.s.bookChords!==false?'checked':''}> ${esc(itemTitle(e.it))}</label>`).join('');
+  $$('[data-bch]',cl).forEach(x=>x.onchange=()=>{ songById(x.dataset.bch).bookChords=x.checked; save(); renderBook(); });
+}
+function printBook(){
+  const sl=cur(), out=$('#printOut');
+  out.innerHTML = $$('#bView .lpage').map(p=>p.outerHTML).join('');
+  $('#pageStyle').textContent=`@page{size:${BOOK.w}in ${BOOK.h}in;margin:${BOOK.m}in}`;
+  const old=document.title;
+  document.title = [sl.name, sl.date, 'lyrics'].filter(Boolean).join(' ');
+  setTimeout(()=>{ window.print(); document.title=old; }, 50);
+}
+
 function doPrint(){
   const sl=cur(), out=$('#printOut');
   out.innerHTML = $('#ppage').innerHTML;
