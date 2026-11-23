@@ -26,3 +26,7 @@ The browser also keeps your latest work between visits, but treat the band file 
 `some-guys.json` is an example band file.
 
 Songs can be imported from a CSV under **Band settings**. Recognized columns: `title`, `lead vocals`/`vox`/`singer`, `key`, `length`/`duration`, `tempo`/`bpm`, `notes`, `tags`.
+
+## Future ideas
+
+Planned and possible features are written up in [docs/future-ideas.md](docs/future-ideas.md).
