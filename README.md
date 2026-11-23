@@ -4,7 +4,7 @@ A single-file, offline setlist builder for any band or event. Open `Setlist Buil
 
 ## Features
 
-- **Song catalog**: title, key, lead vox (picked from your band members), length, tempo, notes and tags. Filter by tag, singer, or missing info.
+- **Song catalog**: title, artist (the original artist for covers; the same at every gig), key, lead vox (picked from your band members), length, tempo, notes and tags. Filter by tag, singer, or missing info (key/vox, artist, lyrics).
 - **Mashups**: one setlist slot made of parts of 2+ songs. The parts can be catalog songs or free text.
 - **Setlists**: create, duplicate, and delete them. Drag songs in from the catalog (or multi-select and add), drag to reorder, add breaks, and mark segues.
 - **Per-gig overrides**: key, vox, tempo, and notes can change for one setlist without touching the catalog. Length is global.
@@ -25,7 +25,7 @@ The browser also keeps your latest work between visits, but treat the band file 
 
 `some-guys.json` is an example band file.
 
-Songs can be imported from a CSV under **Band settings**. Recognized columns: `title`, `lead vocals`/`vox`/`singer`, `key`, `length`/`duration`, `tempo`/`bpm`, `notes`, `tags`.
+Songs can be imported from a CSV under **Band settings**. Recognized columns: `title`, `artist`, `lead vocals`/`vox`/`singer`, `key`, `length`/`duration`, `tempo`/`bpm`, `notes`, `tags`. For songs already in the catalog, the import fills in a blank artist and changes nothing else.
 
 ## Future ideas
 
