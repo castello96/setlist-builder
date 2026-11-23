@@ -169,6 +169,19 @@ table.data tbody tr:hover{background:#fbf7ec}
 #modal.open{display:flex}
 .mbox{background:#fff;border-radius:14px;padding:22px;width:560px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)}
 .mbox.wide{width:1180px}
+.sptable{width:100%;border-collapse:collapse;font-size:13px}
+.sptable td{padding:6px 8px;border-bottom:1px solid var(--line2);vertical-align:top}
+.sptable td.n{color:var(--muted);width:28px;text-align:right}
+.sptable .sa{color:var(--muted);font-size:12px}
+.sptable .ok{color:#1a7f45}.sptable .auto{color:#9a6a00}.sptable .none{color:var(--muted);font-style:italic}
+.sptable .acts{white-space:nowrap;text-align:right;width:1%}
+.spfind{background:var(--line2);border-radius:8px;padding:8px;margin-top:6px}
+.spfind .row{margin-bottom:6px}
+.spres{display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto}
+.spres button{all:unset;cursor:pointer;padding:5px 8px;border-radius:6px;background:#fff;display:flex;justify-content:space-between;gap:10px}
+.spres button:hover{outline:2px solid var(--navy)}
+.spstat{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.spwarn{background:#fff6e0;border:1px solid #f0d58a;border-radius:8px;padding:8px 10px;font-size:13px}
 .mbox label{margin-bottom:10px}
 .mbox label input,.mbox label textarea{width:100%}
 .mbox label input[type=checkbox],.mbox label input[type=radio]{width:auto;margin:0}
@@ -345,7 +358,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getM
 /* ---------- state ---------- */
 let S, view='setlists', curId=null;
 function newSong(o={}){ return Object.assign({id:uid(), type:'song', title:'', artist:'', key:'', vox:[], length:null, tempo:null, notes:'', tags:[], parts:[], lyrics:'', noBook:false, bookChords:true}, o); }
-function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, tagColors:{}, showSetVox:true, book:{who:'', chords:true, fontSize:22, cover:true}}; }
+function defaultSettings(){ return {logo:null, showLogo:true, columns:Object.keys(COLS).map(id=>({id,on:['num','title','key','vox'].includes(id)})), fit:'flow', fontSize:16, showTotals:true, showNotes:true, showParts:true, paper:'letter', margin:0.5, defaultBuffer:30, members:null, tagColors:{}, showSetVox:true, book:{who:'', chords:true, fontSize:22, cover:true}, spotify:{clientId:''}}; }
 function freshState(name){ return {format:FILE_FORMAT, version:1, band:{name}, songs:[], setlists:[], settings:Object.assign(defaultSettings(),{members:[]})}; }
 function load(){
   let raw=null, migrated=false;
@@ -658,6 +671,7 @@ function renderBuilder(){
       <span class="grow"></span>
       <button class="btn" data-act="slNotes">Notes${sl.notes?' •':''}</button>
       <button class="btn" data-act="lyricsBook" title="Build an iPad lyrics book PDF for this setlist">Lyrics book</button>
+      <button class="btn" data-act="spotify" title="Turn this setlist into a Spotify playlist">Spotify</button>
       <button class="btn primary" data-act="print">Print / PDF</button>
     </div>
     <div class="summary" id="slSummary"></div>
@@ -913,6 +927,7 @@ ACT.editLen = (d, e, el) => {
 ACT.slNotes = () => { const sl=cur(); openModal(`<h2>Setlist notes</h2><label>Notes <small>(shown at the top of the printout if enabled)</small><textarea id="nT" style="min-height:140px">${esc(sl.notes)}</textarea></label><div class="mfoot"><span class="grow"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="nS">Save</button></div>`); $('#nS').onclick=()=>{ sl.notes=$('#nT').value.trim(); touch(); closeModal(); renderBuilder(); }; setTimeout(()=>$('#nT').focus(),0); };
 ACT.print = () => openPrint();
 ACT.lyricsBook = () => openBook();
+ACT.spotify = () => openSpotify();
 
 function wireBuilderDnD(){
   const bcat=$('#bcat'), list=$('#sitems');
@@ -1367,6 +1382,20 @@ function renderSettings(){
       <p class="muted">The browser also keeps your latest work between visits, but treat the band file as the real copy.</p>
       <div class="toolbar"><button class="btn primary" data-act="saveBand">Save band file</button><button class="btn danger" data-act="newBand">Start a new band…</button></div>
     </div>
+    <div class="card" style="padding:18px" id="spCard">
+      <h2>Spotify</h2>
+      <p style="margin-top:-6px">Turn any setlist into a Spotify playlist in set order (the <b>Spotify</b> button in a setlist).</p>
+      ${spCanAuth()?'':`<p class="spwarn">Spotify sign-in only works when this app is opened from a web address (https, or http://127.0.0.1), not as a file on your computer. Open the band's hosted copy of the app to use it.</p>`}
+      <label>Spotify app Client ID<input id="spCid" value="${esc(S.settings.spotify.clientId||'')}" placeholder="32 letters and numbers" spellcheck="false"></label>
+      <p class="muted" style="margin-top:-4px">Redirect URI for your Spotify app: <code id="spRuri">${esc(spRedirect())}</code> <button class="btn" style="padding:1px 8px;font-size:12px" id="spCopy">Copy</button></p>
+      <div class="spstat" id="spStat"></div>
+      <details><summary class="muted" style="cursor:pointer">How to set this up (one time)</summary><ol class="muted" style="padding-left:18px">
+        <li>One person (with Spotify Premium, which Spotify requires for small personal apps) goes to <b>developer.spotify.com/dashboard</b> and clicks <b>Create app</b>.</li>
+        <li>Any name and description. For <b>Redirect URI</b>, paste the one above exactly. Tick <b>Web API</b>, then Save.</li>
+        <li>Copy the app's <b>Client ID</b> into the box above, then <b>Save band file</b> so everyone gets it.</li>
+        <li>In the app's <b>User Management</b>, add the name and Spotify email of each band member who will make playlists (Spotify allows 5).</li>
+      </ol></details>
+    </div>
     <div class="card" style="padding:18px">
       <h2>Import songs from CSV</h2>
       <p>Adds songs whose titles aren't already in the catalog. Recognized columns: <code>title</code>, <code>artist</code>, <code>lead vocals</code> (or <code>vox</code>), <code>key</code>, <code>length</code>, <code>tempo</code>/<code>bpm</code>, <code>notes</code>, <code>tags</code> (separated by commas or semicolons). For songs already in the catalog, a blank artist is filled in and nothing else changes.</p>
@@ -1380,6 +1409,9 @@ function renderSettings(){
   $('#defBuf').onchange=e=>{ S.settings.defaultBuffer=numOrNull(e.target.value)??0; save(); };
   $('#logoFile').onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>{ const w=Math.min(1000,img.width), h=Math.round(img.height*w/img.width); const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); S.settings.logo=cv.toDataURL('image/png'); save(); render(); }; img.src=r.result; }; r.readAsDataURL(f); };
   $('#bandName').onchange=e=>{ const v=e.target.value.trim(); if(!v){ e.target.value=S.band.name; return; } S.band.name=v; save(); render(); };
+  $('#spCid').onchange=e=>{ S.settings.spotify.clientId=e.target.value.trim(); save(); };
+  $('#spCopy').onclick=()=>{ navigator.clipboard?.writeText(spRedirect()); $('#spCopy').textContent='Copied'; };
+  renderSpStat($('#spStat'));
   $('#importCsv').onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ const r=importCsv(t); $('#csvMsg').textContent=r; }); };
 }
 function renderMembers(){
@@ -1430,9 +1462,203 @@ function importCsv(text){
   save(); return `Added ${added} song${added===1?'':'s'}${filled?`, filled in the artist on ${filled}`:''}, skipped ${skipped} already in the catalog.`;
 }
 
+/* ---------- Spotify ---------- */
+/* Authorization Code with PKCE straight from the browser: no server, no secret. The Client ID
+   lives in the band file; the sign-in tokens stay in this browser only. Each catalog song keeps
+   its matched track (song.spotify), so matching happens once. */
+const SP_KEY='setlist-builder-spotify', SP_SCOPES='user-read-private playlist-modify-public playlist-modify-private';
+const spRedirect = () => location.origin + location.pathname.replace(/[^/]*$/,'');   // the folder; index.html forwards to the app
+const spCanAuth = () => location.protocol==='https:' || /^http:\/\/(127\.0\.0\.1|\[::1\])(:\d+)?$/.test(location.origin);
+function spTok(){ try{ return JSON.parse(localStorage.getItem(SP_KEY)||'null'); }catch(e){ return null; } }
+function spSetTok(t){ try{ t ? localStorage.setItem(SP_KEY, JSON.stringify(t)) : localStorage.removeItem(SP_KEY); }catch(e){} }
+const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+class SpErr extends Error { constructor(m, status){ super(m); this.status=status; } }
+
+async function spConnect(){
+  const cid=(S.settings.spotify.clientId||'').trim();
+  if(!spCanAuth()){ alert('Spotify sign-in needs the app opened from a web address, not a file. See Band settings → Spotify.'); return; }
+  if(!cid){ alert('Add your Spotify app Client ID in Band settings → Spotify first.'); closeModal(); go('settings'); return; }
+  const ver=b64url(crypto.getRandomValues(new Uint8Array(48))), state=b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const challenge=b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ver)));
+  sessionStorage.setItem('sp-pkce', JSON.stringify({ver, state, view, curId}));
+  location.href='https://accounts.spotify.com/authorize?'+new URLSearchParams({response_type:'code', client_id:cid, redirect_uri:spRedirect(), scope:SP_SCOPES, code_challenge_method:'S256', code_challenge:challenge, state});
+}
+function spDisconnect(){ spSetTok(null); }
+async function spToken(body){
+  const r=await fetch('https://accounts.spotify.com/api/token', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new SpErr(j.error_description||j.error||('HTTP '+r.status), j.error==='invalid_grant'?401:r.status);
+  const old=spTok()||{};
+  const t={access:j.access_token, refresh:j.refresh_token||old.refresh, exp:Date.now()+((j.expires_in||3600)-60)*1000, user:old.user};
+  spSetTok(t); return t;
+}
+async function spAccess(force){
+  const t=spTok(); if(!t) throw new SpErr('Not connected to Spotify.', 401);
+  if(!force && Date.now()<t.exp) return t.access;
+  try{ return (await spToken({grant_type:'refresh_token', refresh_token:t.refresh, client_id:S.settings.spotify.clientId})).access; }
+  catch(e){ if(e.status===401||e.status===400) spSetTok(null); throw new SpErr('Your Spotify sign-in expired. Connect again.', 401); }
+}
+async function spApi(path, opt={}, tries=0){
+  const tok=await spAccess(tries>0 && opt._retry401);
+  const r=await fetch('https://api.spotify.com/v1'+path, {method:opt.method||'GET', headers:{Authorization:'Bearer '+tok, ...(opt.body?{'Content-Type':'application/json'}:{})}, body:opt.body?JSON.stringify(opt.body):undefined});
+  if(r.status===401 && tries<1) return spApi(path, {...opt, _retry401:true}, tries+1);
+  if(r.status===429 && tries<4){ const w=+(r.headers.get('Retry-After')||2); await new Promise(f=>setTimeout(f, Math.min(w,30)*1000)); return spApi(path, opt, tries+1); }
+  if(r.status===204) return null;
+  const j=await r.json().catch(()=>null);
+  if(!r.ok){
+    let m=(j&&j.error&&(j.error.message||j.error))||('HTTP '+r.status);
+    if(r.status===403) m+=' — Spotify refused this. Make sure you are added under User Management in the Spotify app, and that its owner has Premium.';
+    throw new SpErr(m, r.status);
+  }
+  return j;
+}
+async function spHandleRedirect(){
+  const q=new URLSearchParams(location.search); if(!q.has('code') && !q.has('error')) return;
+  let p=null; try{ p=JSON.parse(sessionStorage.getItem('sp-pkce')); }catch(e){}
+  sessionStorage.removeItem('sp-pkce');
+  history.replaceState(null, '', location.pathname+location.hash);
+  if(!S) return;
+  if(q.get('error') || !p || q.get('state')!==p.state){ alert('Spotify sign-in was cancelled or did not complete.'); return; }
+  try{
+    await spToken({client_id:S.settings.spotify.clientId, grant_type:'authorization_code', code:q.get('code'), redirect_uri:spRedirect(), code_verifier:p.ver});
+    const me=await spApi('/me'); const t=spTok(); t.user=me.display_name||me.id; spSetTok(t);
+  }catch(e){ alert('Spotify sign-in failed: '+e.message); return; }
+  if(p.view==='builder' && S.setlists.some(x=>x.id===p.curId)){ go('builder', p.curId); openSpotify(); }
+  else render();
+}
+function renderSpStat(el, after){
+  if(!el) return; const t=spTok();
+  el.innerHTML = t ? `<span>✓ Connected to Spotify${t.user?` as <b>${esc(t.user)}</b>`:''}</span><button class="btn" data-spoff>Disconnect</button>`
+                   : `<button class="btn primary" data-spon ${spCanAuth()&&S.settings.spotify.clientId?'':'disabled'}>Connect Spotify</button>${S.settings.spotify.clientId?'':'<span class="muted">Add the Client ID first (Band settings → Spotify).</span>'}`;
+  $('[data-spon]',el)?.addEventListener('click', spConnect);
+  $('[data-spoff]',el)?.addEventListener('click', ()=>{ spDisconnect(); renderSpStat(el, after); after&&after(); });
+}
+
+/* matching */
+const spTrack = t => ({id:t.id, uri:t.uri, name:t.name, artists:(t.artists||[]).map(a=>a.name).join(', '), album:t.album?.name||'', year:(t.album?.release_date||'').slice(0,4), url:t.external_urls?.spotify||''});
+async function spSearch(q){ const j=await spApi('/search?'+new URLSearchParams({q, type:'track', limit:'10'})); return (j?.tracks?.items||[]).filter(Boolean).map(spTrack); }
+const spNorm = x => String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/^the\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
+const spBaseTitle = s => s.title.replace(/\s*\([^)]*\)\s*$/,'').trim() || s.title;
+async function spAutoMatch(s){
+  const title=spBaseTitle(s);
+  let r = s.artist ? await spSearch(`track:"${title.replace(/"/g,'')}" artist:"${s.artist.replace(/"/g,'')}"`) : [];
+  if(!r.length) r = await spSearch(`${title} ${s.artist||''}`.trim());
+  if(!r.length) return null;
+  const nt=spNorm(title), na=spNorm(s.artist);
+  const score = t => (na && spNorm(t.artists).includes(na) ? 2 : 0) + (spNorm(t.name).startsWith(nt) ? 1 : 0);
+  return r.reduce((best,t)=>score(t)>score(best)?t:best, r[0]);
+}
+/* playlist order: every song slot in set order; a mashup adds its catalog parts */
+function spEntries(sl){
+  const out=[];
+  sl.items.forEach(it=>{
+    if(it.kind==='break') return;
+    const s=songById(it.songId); if(!s) return;
+    if(s.type==='mashup') (s.parts||[]).forEach(pid=>{ const ps=typeof pid==='string'?songById(pid):null; if(ps) out.push({s:ps, via:s}); });
+    else out.push({s});
+  });
+  return out;
+}
+function openSpotify(){
+  const sl=cur(); if(!sl) return;
+  const st={open:null, busy:false, msg:''};
+  const defName=[sl.name, fmtDate(sl.date)].filter(Boolean).join(' · ');
+  openModal(`<div class="toolbar"><h2 style="margin:0">Spotify playlist</h2><span class="grow"></span><button class="btn" data-close>Close</button></div>
+    <div class="spstat" id="spS"></div>
+    <div id="spBody"></div>`, true);
+  const body=$('#spBody');
+  const draw = () => {
+    renderSpStat($('#spS'), draw);
+    const E=spEntries(sl), uniq=[...new Map(E.map(e=>[e.s.id,e.s])).values()];
+    const un=uniq.filter(s=>!s.spotify), auto=uniq.filter(s=>s.spotify&&s.spotify.auto), ok=E.filter(e=>e.s.spotify&&e.s.spotify.uri).length;
+    const conn=!!spTok(), pl=sl.spotify;
+    body.innerHTML = `
+      ${spCanAuth()?'':`<p class="spwarn">Spotify sign-in only works when this app is opened from a web address (https, or http://127.0.0.1), not as a file. See Band settings → Spotify.</p>`}
+      <div class="g3" style="grid-template-columns:2fr 1fr 1fr;align-items:end">
+        <label>Playlist name<input id="spName" value="${esc((pl&&pl.name)||defName)}"></label>
+        <label class="opt" style="margin-bottom:12px !important"><input type="checkbox" id="spPub" ${(pl?pl.public:true)!==false?'checked':''}> Public (bandmates can open the link)</label>
+        <div style="margin-bottom:10px;text-align:right">${pl&&pl.url?`<a href="${esc(pl.url)}" target="_blank" rel="noopener">Open current playlist ↗</a>`:''}</div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="spMatch" ${conn&&un.length&&!st.busy?'':'disabled'}>Find matches for ${un.length} song${un.length===1?'':'s'}</button>
+        <span class="grow"></span>
+        <span class="muted">${ok} of ${E.length} tracks matched${auto.length?` · ${auto.length} auto-matched, worth a glance`:''}</span>
+        ${pl&&pl.id?`<button class="btn" id="spNew" ${conn&&ok&&!st.busy?'':'disabled'}>Create a new playlist</button><button class="btn primary" id="spUpd" ${conn&&ok&&!st.busy?'':'disabled'}>Update playlist</button>`
+                   :`<button class="btn primary" id="spNew" ${conn&&ok&&!st.busy?'':'disabled'}>Create playlist</button>`}
+      </div>
+      <p id="spMsg" class="muted" style="min-height:1.2em">${st.msg}</p>
+      <table class="sptable"><tbody>${E.map((e,i)=>{
+        const s=e.s, m=s.spotify;
+        const stat = !m ? '<span class="none">Not matched yet</span>'
+          : m.none ? '<span class="none">Not on Spotify (skipped)</span>'
+          : `<span class="${m.auto?'auto':'ok'}">${m.auto?'≈':'✓'} ${esc(m.name)}</span> <span class="sa">— ${esc(m.artists)}${m.album?` · ${esc(m.album)}`:''}${m.year?` (${m.year})`:''}</span>${m.url?` <a href="${esc(m.url)}" target="_blank" rel="noopener" title="Open in Spotify">↗</a>`:''}`;
+        const find = st.open===s.id ? `<div class="spfind"><div class="row"><input id="spQ" value="${esc(spBaseTitle(s)+' '+(s.artist||''))}"><button class="btn" id="spGo">Search</button></div><div class="spres" id="spRes"><span class="muted">Searching…</span></div></div>` : '';
+        return `<tr><td class="n">${i+1}</td><td><b>${esc(s.title)}</b>${e.via?` <span class="sa">(in ${esc(e.via.title)})</span>`:''}<div class="sa">${esc(s.artist||'no artist')}</div></td>
+          <td>${stat}${find}</td>
+          <td class="acts">${m&&m.auto?`<button class="btn" data-spok="${s.id}" title="This is the right recording">Looks right</button> `:''}<button class="btn" data-spch="${s.id}" ${conn?'':'disabled'}>${m&&!m.none?'Change':'Find'}</button> <button class="btn" data-spnone="${s.id}" title="Skip this song in playlists">${m&&m.none?'Undo skip':'Skip'}</button></td></tr>`;
+      }).join('') || '<tr><td class="empty">No songs in this setlist yet.</td></tr>'}</tbody></table>`;
+    $('#spName').onchange=e=>{ if(sl.spotify) { sl.spotify.name=e.target.value.trim(); touch(); } };
+    $('#spMatch').onclick=matchAll;
+    $('#spNew').onclick=()=>exportPl(false);
+    $('#spUpd')&&($('#spUpd').onclick=()=>exportPl(true));
+    $$('[data-spok]',body).forEach(b=>b.onclick=()=>{ delete songById(b.dataset.spok).spotify.auto; save(); draw(); });
+    $$('[data-spnone]',body).forEach(b=>b.onclick=()=>{ const s=songById(b.dataset.spnone); s.spotify = s.spotify&&s.spotify.none ? null : {none:true}; if(!s.spotify) delete s.spotify; save(); draw(); });
+    $$('[data-spch]',body).forEach(b=>b.onclick=()=>{ st.open = st.open===b.dataset.spch ? null : b.dataset.spch; draw(); if(st.open) runFind(); });
+    if(st.open){ $('#spGo').onclick=runFind; $('#spQ').onkeydown=e=>{ if(e.key==='Enter') runFind(); }; }
+  };
+  const say = m => { st.msg=m; const el=$('#spMsg'); if(el) el.innerHTML=m; };
+  async function runFind(){
+    const s=songById(st.open), box=$('#spRes'); if(!s||!box) return;
+    box.innerHTML='<span class="muted">Searching…</span>';
+    try{
+      const r=await spSearch($('#spQ').value.trim());
+      box.innerHTML = r.map((t,i)=>`<button data-pick="${i}"><span><b>${esc(t.name)}</b> <span class="sa">— ${esc(t.artists)}</span></span><span class="sa">${esc(t.album)}${t.year?` (${t.year})`:''}</span></button>`).join('') || '<span class="muted">No results. Try different words.</span>';
+      $$('[data-pick]',box).forEach(b=>b.onclick=()=>{ s.spotify=r[+b.dataset.pick]; st.open=null; save(); draw(); });
+    }catch(e){ box.innerHTML=`<span class="muted">${esc(e.message)}</span>`; if(e.status===401) draw(); }
+  }
+  async function matchAll(){
+    const todo=[...new Map(spEntries(sl).map(e=>[e.s.id,e.s])).values()].filter(s=>!s.spotify);
+    st.busy=true; draw(); let found=0, missing=0;
+    try{
+      for(let i=0;i<todo.length;i++){
+        say(`Searching Spotify… ${i+1} of ${todo.length}`);
+        const t=await spAutoMatch(todo[i]);
+        if(t){ todo[i].spotify={...t, auto:true}; found++; } else missing++;
+      }
+      say(`Matched ${found}${missing?`; ${missing} not found — use Find to search by hand, or Skip`:''}. Auto-matches (≈) are the top search result, so give them a quick look.`);
+    }catch(e){ say(`Stopped: ${esc(e.message)}`); }
+    st.busy=false; save(); draw();
+  }
+  async function exportPl(update){
+    const uris=spEntries(sl).map(e=>e.s.spotify).filter(m=>m&&m.uri).map(m=>m.uri);
+    const name=$('#spName').value.trim()||defName, pub=$('#spPub').checked;
+    st.busy=true; draw(); say(update?'Updating the playlist…':'Creating the playlist…');
+    try{
+      let id=update&&sl.spotify?sl.spotify.id:null;
+      if(update){
+        try{ await spApi(`/playlists/${id}/items`, {method:'PUT', body:{uris:uris.slice(0,100)}}); }
+        catch(e){ if(e.status===404){ id=null; } else throw e; }
+        if(id) try{ await spApi(`/playlists/${id}`, {method:'PUT', body:{name, public:pub}}); }catch(e){}   // renaming is best effort
+      }
+      const fresh=!id;
+      if(fresh){
+        const p=await spApi('/me/playlists', {method:'POST', body:{name, public:pub, description:`${S.band.name} setlist${sl.venue?` · ${sl.venue}`:''}${sl.date?` · ${fmtDate(sl.date)}`:''}. Made with Setlist Builder.`}});
+        id=p.id; sl.spotify={id, url:p.external_urls?.spotify||`https://open.spotify.com/playlist/${id}`};
+      }
+      for(let i=fresh?0:100; i<uris.length; i+=100) await spApi(`/playlists/${id}/items`, {method:'POST', body:{uris:uris.slice(i,i+100)}});
+      Object.assign(sl.spotify, {name, public:pub, synced:Date.now()}); touch();
+      const skipped=spEntries(sl).length-uris.length;
+      say(`${fresh?'Created':'Updated'} “${esc(name)}” with ${uris.length} track${uris.length===1?'':'s'}${skipped?` (${skipped} not matched or skipped)`:''}. <a href="${esc(sl.spotify.url)}" target="_blank" rel="noopener">Open in Spotify ↗</a>`);
+    }catch(e){ say(`Couldn't ${update?'update':'create'} the playlist: ${esc(e.message)}`); }
+    st.busy=false; draw();
+  }
+  draw();
+}
+
 /* ---------- boot ---------- */
 load();
 render();
+spHandleRedirect();
 </script>
 </body>
 </html>
